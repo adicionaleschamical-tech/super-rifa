@@ -34,6 +34,7 @@ st.markdown("""
 st.markdown('<div class="main-title">✂️ SUPER RIFA! ✂️</div>', unsafe_allow_html=True)
 st.markdown('<div class="sub-title">PARA EQUIPAR MI BARBERÍA</div>', unsafe_allow_html=True)
 
+# Premios
 col1, col2, col3, col4, col5 = st.columns(5)
 premios_texto = ["JARRA TÉRMICA<br>2 litros", "ROPA INTERIOR<br>Conjunto femenino", "TIENDA GABRIELA<br>Premio sorpresa", "BARBERÍA CANICHE<br>Corte de pelo", "PASTAFROLA<br>Una pastafrola"]
 for i, col in enumerate([col1, col2, col3, col4, col5]):
@@ -43,21 +44,17 @@ for i, col in enumerate([col1, col2, col3, col4, col5]):
 st.markdown('<div class="info-card"><h3>🎲 NÚMEROS DEL 00 AL 99</h3><div class="precio-destacado">$3.000 CADA NÚMERO</div></div>', unsafe_allow_html=True)
 st.markdown('<div class="promo-oferta"><p>🎁 ¡PROMOCIÓN ESPECIAL! 🎁</p><span>2 NÚMEROS POR $5.000</span></div>', unsafe_allow_html=True)
 
-# Conectar con Google Sheets con manejo de errores
+# Conectar con Google Sheets
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
 
 try:
     creds_dict = json.loads(st.secrets["google_credentials"])
     creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
     client = gspread.authorize(creds)
-    
-    # Probar conexión a la planilla
     sheet = client.open("Rifa").sheet1
-    st.success("✅ Conexión a Google Sheets exitosa!")
-    
+    st.success("✅ Conectado a Google Sheets")
 except Exception as e:
     st.error(f"❌ Error de conexión: {str(e)}")
-    st.code(traceback.format_exc())
     st.stop()
 
 # Leer datos
@@ -80,15 +77,18 @@ for i in range(100):
         else:
             st.button(f"🔴 {numero}", key=f"num_{numero}", disabled=True)
 
+# Formulario de reserva
 if 'numero_seleccionado' in st.session_state:
     numero_sel = st.session_state.numero_seleccionado
     
     # Verificar que siga disponible
     datos_actuales = sheet.get_all_values()
     estado_actual = "Disponible"
-    for fila in datos_actuales[1:]:
+    fila_numero = None
+    for idx, fila in enumerate(datos_actuales[1:], start=2):
         if fila[0] == numero_sel:
             estado_actual = fila[1]
+            fila_numero = idx
             break
     
     if estado_actual != "Disponible":
@@ -105,24 +105,25 @@ if 'numero_seleccionado' in st.session_state:
             
             if st.form_submit_button("✅ RESERVAR"):
                 if not telefono:
-                    st.error("Teléfono obligatorio")
+                    st.error("❌ Teléfono obligatorio")
                 else:
                     try:
-                        celda = sheet.find(numero_sel)
-                        if celda:
-                            sheet.update(f"B{celda.row}", "Reservado")
-                            sheet.update(f"C{celda.row}", nombre or "")
-                            sheet.update(f"D{celda.row}", dni or "")
-                            sheet.update(f"E{celda.row}", telefono)
-                            st.success(f"✅ Número {numero_sel} reservado!")
-                            st.balloons()
-                            del st.session_state.numero_seleccionado
-                            st.rerun()
-                        else:
-                            st.error("❌ Error: No se encontró el número")
+                        # Actualizar usando el número de fila
+                        sheet.update_cell(fila_numero, 2, "Reservado")
+                        sheet.update_cell(fila_numero, 3, nombre or "")
+                        sheet.update_cell(fila_numero, 4, dni or "")
+                        sheet.update_cell(fila_numero, 5, telefono)
+                        
+                        st.success(f"✅ ¡Número {numero_sel} reservado con éxito!")
+                        st.info(f"📌 Transferí a **Tomas.130611** para confirmar.")
+                        st.balloons()
+                        del st.session_state.numero_seleccionado
+                        time.sleep(2)
+                        st.rerun()
                     except Exception as e:
                         st.error(f"❌ Error al reservar: {str(e)}")
 
+# Footer
 st.markdown('<div class="sorteo-texto">🎲 SORTEO POR QUINIELA NACIONAL MATUTINA - AL VENDERSE TODOS LOS NÚMEROS 🎲</div>', unsafe_allow_html=True)
 st.markdown('<div class="pago-texto">💰 PAGOS POR TRANSFERENCIA AL ALIAS:<br><div class="alias-destacado">Tomas.130611</div></div>', unsafe_allow_html=True)
 
@@ -159,4 +160,10 @@ with st.sidebar:
     **💎 PROMO ESPECIAL**
     
     ¡Llevá 2 números por **$5.000**!
+    
+    ---
+    
+    **📞 CONTACTO**
+    
+    Ante cualquier duda, contactanos.
     """)
