@@ -5,6 +5,7 @@ import pandas as pd
 from datetime import datetime
 import time
 import json
+import traceback
 
 st.set_page_config(page_title="SUPER RIFA", page_icon="✂️", layout="wide")
 
@@ -42,15 +43,24 @@ for i, col in enumerate([col1, col2, col3, col4, col5]):
 st.markdown('<div class="info-card"><h3>🎲 NÚMEROS DEL 00 AL 99</h3><div class="precio-destacado">$3.000 CADA NÚMERO</div></div>', unsafe_allow_html=True)
 st.markdown('<div class="promo-oferta"><p>🎁 ¡PROMOCIÓN ESPECIAL! 🎁</p><span>2 NÚMEROS POR $5.000</span></div>', unsafe_allow_html=True)
 
+# Conectar con Google Sheets con manejo de errores
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+
 try:
     creds_dict = json.loads(st.secrets["google_credentials"])
     creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
-except:
-    creds = Credentials.from_service_account_file("credenciales.json", scopes=scope)
+    client = gspread.authorize(creds)
+    
+    # Probar conexión a la planilla
+    sheet = client.open("Rifa").sheet1
+    st.success("✅ Conexión a Google Sheets exitosa!")
+    
+except Exception as e:
+    st.error(f"❌ Error de conexión: {str(e)}")
+    st.code(traceback.format_exc())
+    st.stop()
 
-client = gspread.authorize(creds)
-sheet = client.open("Rifa").sheet1
+# Leer datos
 datos = sheet.get_all_values()
 df = pd.DataFrame(datos[1:], columns=datos[0])
 
@@ -72,26 +82,81 @@ for i in range(100):
 
 if 'numero_seleccionado' in st.session_state:
     numero_sel = st.session_state.numero_seleccionado
-    with st.form("compra_form"):
-        nombre = st.text_input("Nombre")
-        dni = st.text_input("DNI")
-        telefono = st.text_input("Teléfono *")
-        st.markdown('<div style="background:#f7f9fc;padding:15px;border-radius:15px;border-left:4px solid #c9a03d"><strong>💰 PAGO:</strong> Transferencia al alias <strong style="color:#c9a03d">Tomas.130611</strong></div>', unsafe_allow_html=True)
-        comprobante = st.file_uploader("Comprobante (opcional)", type=['png', 'jpg'])
-        if st.form_submit_button("✅ RESERVAR"):
-            if not telefono:
-                st.error("Teléfono obligatorio")
-            else:
-                celda = sheet.find(numero_sel)
-                if celda:
-                    sheet.update(f"B{celda.row}", "Reservado")
-                    sheet.update(f"C{celda.row}", nombre or "")
-                    sheet.update(f"D{celda.row}", dni or "")
-                    sheet.update(f"E{celda.row}", telefono)
-                    st.success(f"✅ Número {numero_sel} reservado!")
-                    st.balloons()
-                    del st.session_state.numero_seleccionado
-                    st.rerun()
+    
+    # Verificar que siga disponible
+    datos_actuales = sheet.get_all_values()
+    estado_actual = "Disponible"
+    for fila in datos_actuales[1:]:
+        if fila[0] == numero_sel:
+            estado_actual = fila[1]
+            break
+    
+    if estado_actual != "Disponible":
+        st.error(f"❌ El número {numero_sel} ya no está disponible.")
+        del st.session_state.numero_seleccionado
+        st.rerun()
+    else:
+        with st.form("compra_form"):
+            nombre = st.text_input("Nombre")
+            dni = st.text_input("DNI")
+            telefono = st.text_input("Teléfono *")
+            st.markdown('<div style="background:#f7f9fc;padding:15px;border-radius:15px;border-left:4px solid #c9a03d"><strong>💰 PAGO:</strong> Transferencia al alias <strong style="color:#c9a03d">Tomas.130611</strong></div>', unsafe_allow_html=True)
+            comprobante = st.file_uploader("Comprobante (opcional)", type=['png', 'jpg'])
+            
+            if st.form_submit_button("✅ RESERVAR"):
+                if not telefono:
+                    st.error("Teléfono obligatorio")
+                else:
+                    try:
+                        celda = sheet.find(numero_sel)
+                        if celda:
+                            sheet.update(f"B{celda.row}", "Reservado")
+                            sheet.update(f"C{celda.row}", nombre or "")
+                            sheet.update(f"D{celda.row}", dni or "")
+                            sheet.update(f"E{celda.row}", telefono)
+                            st.success(f"✅ Número {numero_sel} reservado!")
+                            st.balloons()
+                            del st.session_state.numero_seleccionado
+                            st.rerun()
+                        else:
+                            st.error("❌ Error: No se encontró el número")
+                    except Exception as e:
+                        st.error(f"❌ Error al reservar: {str(e)}")
 
 st.markdown('<div class="sorteo-texto">🎲 SORTEO POR QUINIELA NACIONAL MATUTINA - AL VENDERSE TODOS LOS NÚMEROS 🎲</div>', unsafe_allow_html=True)
 st.markdown('<div class="pago-texto">💰 PAGOS POR TRANSFERENCIA AL ALIAS:<br><div class="alias-destacado">Tomas.130611</div></div>', unsafe_allow_html=True)
+
+# Sidebar
+with st.sidebar:
+    st.markdown("### ✂️ SUPER RIFA ✂️")
+    st.markdown("---")
+    st.markdown("""
+    **🎯 ¿CÓMO PARTICIPAR?**
+    
+    1️⃣ Elegí un número **VERDE**
+    2️⃣ Completá tus datos
+    3️⃣ Transferí al alias: **Tomas.130611**
+    4️⃣ Subí el comprobante
+    5️⃣ ¡Listo! Ya tenés tu número
+    
+    ---
+    
+    **🎨 ESTADOS**
+    
+    🟢 Verde = Disponible  
+    🟠 Naranja = Reservado  
+    🔴 Rojo = Vendido
+    
+    ---
+    
+    **📅 SORTEO**
+    
+    🎲 Quiniela Nacional Matutina  
+    ⏰ Cuando se vendan todos los números
+    
+    ---
+    
+    **💎 PROMO ESPECIAL**
+    
+    ¡Llevá 2 números por **$5.000**!
+    """)
