@@ -1,0 +1,36 @@
+name: Actualizar imagen de rifa
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'  # Cada 10 minutos
+  workflow_dispatch:  # Permite ejecutar manualmente
+
+jobs:
+  update-image:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Clonar repositorio
+      uses: actions/checkout@v2
+      
+    - name: Configurar Python
+      uses: actions/setup-python@v2
+      with:
+        python-version: '3.9'
+    
+    - name: Instalar dependencias
+      run: |
+        pip install gspread pillow pandas oauth2client
+    
+    - name: Generar imagen
+      env:
+        GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
+      run: python generar_imagen.py
+    
+    - name: Subir imagen a GitHub
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add rifa_actualizada.png
+        git diff --quiet && git diff --staged --quiet || git commit -m "🖼️ Actualizar imagen de rifa $(date +'%Y-%m-%d %H:%M')"
+        git push
