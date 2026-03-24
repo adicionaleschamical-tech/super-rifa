@@ -1,0 +1,97 @@
+import streamlit as st
+import gspread
+from google.oauth2.service_account import Credentials
+import pandas as pd
+from datetime import datetime
+import time
+import json
+
+st.set_page_config(page_title="SUPER RIFA", page_icon="✂️", layout="wide")
+
+st.markdown("""
+<style>
+.stApp { background: linear-gradient(135deg, #f8f9fa 0%, #f0f2f5 100%); }
+.main-title { text-align: center; font-size: 3.5em; font-weight: 800; background: linear-gradient(135deg, #1e3a5f, #2c5282); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+.sub-title { text-align: center; font-size: 1.5em; color: #4a5568; margin-top: -10px; }
+.premio-card { background: white; border-radius: 20px; padding: 20px; text-align: center; box-shadow: 0 5px 20px rgba(0,0,0,0.08); margin: 10px; }
+.premio-numero { background: #1e3a5f; color: white; width: 40px; height: 40px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 15px; }
+.info-card { background: #1e3a5f; border-radius: 20px; padding: 25px; color: white; text-align: center; margin: 20px 0; }
+.precio-destacado { font-size: 2em; font-weight: bold; color: #c9a03d; }
+.promo-oferta { background: #c9a03d; border-radius: 20px; padding: 20px; text-align: center; margin: 15px 0; animation: pulse 1.5s infinite; }
+@keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.02); } 100% { transform: scale(1); } }
+.stButton button { border-radius: 12px; background: white; border: 1px solid #e2e8f0; color: #1e3a5f; }
+.stButton button:hover { background: #1e3a5f; color: white; }
+.form-container { background: white; padding: 30px; border-radius: 25px; margin-top: 20px; }
+[data-testid="stSidebar"] { background: #1e3a5f; }
+[data-testid="stSidebar"] * { color: white; }
+.sorteo-texto { text-align: center; margin-top: 30px; padding: 15px; background: #1e3a5f; border-radius: 15px; color: white; }
+.pago-texto { text-align: center; margin-top: 20px; padding: 20px; background: #1e3a5f; border-radius: 15px; color: white; }
+.alias-destacado { font-size: 1.5em; font-weight: bold; color: #c9a03d; background: rgba(255,255,255,0.1); display: inline-block; padding: 8px 20px; border-radius: 30px; }
+</style>
+""", unsafe_allow_html=True)
+
+st.markdown('<div class="main-title">✂️ SUPER RIFA! ✂️</div>', unsafe_allow_html=True)
+st.markdown('<div class="sub-title">PARA EQUIPAR MI BARBERÍA</div>', unsafe_allow_html=True)
+
+col1, col2, col3, col4, col5 = st.columns(5)
+premios_texto = ["JARRA TÉRMICA<br>2 litros", "ROPA INTERIOR<br>Conjunto femenino", "TIENDA GABRIELA<br>Premio sorpresa", "BARBERÍA CANICHE<br>Corte de pelo", "PASTAFROLA<br>Una pastafrola"]
+for i, col in enumerate([col1, col2, col3, col4, col5]):
+    with col:
+        st.markdown(f'<div class="premio-card"><div class="premio-numero">{i+1}°</div>{premios_texto[i]}</div>', unsafe_allow_html=True)
+
+st.markdown('<div class="info-card"><h3>🎲 NÚMEROS DEL 00 AL 99</h3><div class="precio-destacado">$3.000 CADA NÚMERO</div></div>', unsafe_allow_html=True)
+st.markdown('<div class="promo-oferta"><p>🎁 ¡PROMOCIÓN ESPECIAL! 🎁</p><span>2 NÚMEROS POR $5.000</span></div>', unsafe_allow_html=True)
+
+scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+try:
+    creds_dict = json.loads(st.secrets["google_credentials"])
+    creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
+except:
+    creds = Credentials.from_service_account_file("credenciales.json", scopes=scope)
+
+client = gspread.authorize(creds)
+sheet = client.open("Rifa").sheet1
+datos = sheet.get_all_values()
+df = pd.DataFrame(datos[1:], columns=datos[0])
+
+st.markdown("### 🎲 ¡ELEGÍ TUS NÚMEROS!")
+cols = st.columns(10)
+
+for i in range(100):
+    numero = f"{i:02d}"
+    estado = df[df['Número'] == numero]['Estado'].values[0] if len(df[df['Número'] == numero]) > 0 else "Disponible"
+    with cols[i % 10]:
+        if estado == "Disponible":
+            if st.button(f"🟢 {numero}", key=f"num_{numero}"):
+                st.session_state.numero_seleccionado = numero
+                st.rerun()
+        elif estado == "Reservado":
+            st.button(f"🟠 {numero}", key=f"num_{numero}", disabled=True)
+        else:
+            st.button(f"🔴 {numero}", key=f"num_{numero}", disabled=True)
+
+if 'numero_seleccionado' in st.session_state:
+    numero_sel = st.session_state.numero_seleccionado
+    with st.form("compra_form"):
+        nombre = st.text_input("Nombre")
+        dni = st.text_input("DNI")
+        telefono = st.text_input("Teléfono *")
+        st.markdown('<div style="background:#f7f9fc;padding:15px;border-radius:15px;border-left:4px solid #c9a03d"><strong>💰 PAGO:</strong> Transferencia al alias <strong style="color:#c9a03d">Tomas.130611</strong></div>', unsafe_allow_html=True)
+        comprobante = st.file_uploader("Comprobante (opcional)", type=['png', 'jpg'])
+        if st.form_submit_button("✅ RESERVAR"):
+            if not telefono:
+                st.error("Teléfono obligatorio")
+            else:
+                celda = sheet.find(numero_sel)
+                if celda:
+                    sheet.update(f"B{celda.row}", "Reservado")
+                    sheet.update(f"C{celda.row}", nombre or "")
+                    sheet.update(f"D{celda.row}", dni or "")
+                    sheet.update(f"E{celda.row}", telefono)
+                    st.success(f"✅ Número {numero_sel} reservado!")
+                    st.balloons()
+                    del st.session_state.numero_seleccionado
+                    st.rerun()
+
+st.markdown('<div class="sorteo-texto">🎲 SORTEO POR QUINIELA NACIONAL MATUTINA - AL VENDERSE TODOS LOS NÚMEROS 🎲</div>', unsafe_allow_html=True)
+st.markdown('<div class="pago-texto">💰 PAGOS POR TRANSFERENCIA AL ALIAS:<br><div class="alias-destacado">Tomas.130611</div></div>', unsafe_allow_html=True)
