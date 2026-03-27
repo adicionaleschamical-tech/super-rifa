@@ -45,12 +45,10 @@ def verificar_usuario(username, password):
         
         for fila in datos[1:]:
             if len(fila) >= 4 and fila[0] == username and fila[3] == "SI":
-                # Comparar contraseña en texto plano
                 if password == fila[1]:
-                    return True, fila[2]  # fila[2] es el rol
+                    return True, fila[2]
         return False, None
     except Exception as e:
-        st.error(f"Error en login: {e}")
         return False, None
 
 # ========== FUNCIONES PARA CARGAR DATOS ==========
@@ -143,44 +141,33 @@ def actualizar_estado(numero, estado, nombre="", dni="", telefono=""):
     return False
 
 def guardar_config(config):
-    """Guardar configuración con diagnóstico"""
-    if not client or st.session_state.user_role != "admin":
-        st.error("❌ No tienes permisos o no hay conexión")
+    """Guardar configuración (admin y editor pueden)"""
+    if not client:
         return False
     
     try:
         sheet = client.open("Rifa").worksheet("Config")
         
-        # Obtener todas las filas actuales
         todas_filas = sheet.get_all_values()
-        
-        # Si no hay datos, crear encabezados
         if len(todas_filas) == 0:
             sheet.append_row(["Campo", "Valor"])
         
-        # Actualizar cada campo
         for clave, valor in config.items():
             try:
-                # Buscar si la clave ya existe
                 celda = sheet.find(clave)
                 if celda:
-                    # Actualizar valor existente
                     sheet.update_cell(celda.row, 2, str(valor))
                 else:
-                    # Agregar nueva fila
                     sheet.append_row([clave, str(valor)])
-            except Exception as e:
-                st.warning(f"Error con {clave}: {e}")
-        
+            except:
+                pass
         return True
-        
-    except Exception as e:
-        st.error(f"❌ Error al guardar: {str(e)}")
+    except:
         return False
 
 def guardar_premios(premios):
-    """Guardar premios (solo admin)"""
-    if not client or st.session_state.user_role != "admin":
+    """Guardar premios (admin y editor pueden)"""
+    if not client:
         return False
     try:
         sheet = client.open("Rifa").worksheet("Premios")
@@ -195,8 +182,7 @@ def guardar_premios(premios):
             sheet.update_cell(i, 3, p['descripcion'])
             sheet.update_cell(i, 4, p['orden'])
         return True
-    except Exception as e:
-        st.error(f"Error al guardar premios: {e}")
+    except:
         return False
 
 # ========== MOSTRAR LOGIN ==========
@@ -237,122 +223,84 @@ def mostrar_admin_panel(config, premios):
     
     st.markdown("---")
     
-    if st.session_state.user_role == "admin":
-        tab1, tab2, tab3 = st.tabs(["⚙️ Configuración", "🎁 Premios", "👥 Usuarios"])
+    # ========== CONFIGURACIÓN (Admin y Editor pueden) ==========
+    st.markdown("### ⚙️ Configuración General")
+    with st.form("config_form"):
+        nuevo_titulo = st.text_input("Título", value=config.get("titulo", "SUPER RIFA"))
+        nuevo_subtitulo = st.text_input("Subtítulo", value=config.get("subtitulo", "PARA EQUIPAR MI BARBERÍA"))
+        nuevo_color_principal = st.color_picker("Color principal", value=config.get("color_principal", "#1e3a5f"))
+        nuevo_color_secundario = st.color_picker("Color secundario", value=config.get("color_secundario", "#c9a03d"))
+        nuevo_precio = st.number_input("Precio por número ($)", value=int(config.get("precio_unidad", 3000)))
+        nuevo_precio_promo = st.number_input("Precio promoción 2x ($)", value=int(config.get("precio_promo", 5000)))
+        nuevo_alias = st.text_input("Alias de transferencia", value=config.get("alias", "Tomas.130611"))
+        nuevo_telefono = st.text_input("WhatsApp", value=config.get("telefono", "3826448225"))
+        nuevo_sorteo = st.text_input("Texto del sorteo", value=config.get("sorteo_texto", "Quiniela Nacional Matutina"))
+        nueva_fecha = st.text_input("📅 Fecha del sorteo", value=config.get("fecha_sorteo", "Pendiente"))
         
-        with tab1:
-            st.markdown("### Configuración General")
-            with st.form("config_form"):
-                nuevo_titulo = st.text_input("Título", value=config.get("titulo", "SUPER RIFA"))
-                nuevo_subtitulo = st.text_input("Subtítulo", value=config.get("subtitulo", "PARA EQUIPAR MI BARBERÍA"))
-                nuevo_color_principal = st.color_picker("Color principal", value=config.get("color_principal", "#1e3a5f"))
-                nuevo_color_secundario = st.color_picker("Color secundario", value=config.get("color_secundario", "#c9a03d"))
-                nuevo_precio = st.number_input("Precio por número ($)", value=int(config.get("precio_unidad", 3000)))
-                nuevo_precio_promo = st.number_input("Precio promoción 2x ($)", value=int(config.get("precio_promo", 5000)))
-                nuevo_alias = st.text_input("Alias de transferencia", value=config.get("alias", "Tomas.130611"))
-                nuevo_telefono = st.text_input("WhatsApp", value=config.get("telefono", "3826448225"))
-                nuevo_sorteo = st.text_input("Texto del sorteo", value=config.get("sorteo_texto", "Quiniela Nacional Matutina"))
-                nueva_fecha = st.text_input("📅 Fecha del sorteo", value=config.get("fecha_sorteo", "Pendiente"))
-                
-                if st.form_submit_button("💾 Guardar Configuración"):
-                    nueva_config = {
-                        "titulo": nuevo_titulo,
-                        "subtitulo": nuevo_subtitulo,
-                        "color_principal": nuevo_color_principal,
-                        "color_secundario": nuevo_color_secundario,
-                        "precio_unidad": str(nuevo_precio),
-                        "precio_promo": str(nuevo_precio_promo),
-                        "cantidad_promo": "2",
-                        "alias": nuevo_alias,
-                        "telefono": nuevo_telefono,
-                        "sorteo_texto": nuevo_sorteo,
-                        "fecha_sorteo": nueva_fecha,
-                        "footer_texto": config.get("footer_texto", "¡Gracias por participar!")
-                    }
-                    if guardar_config(nueva_config):
-                        st.success("✅ Configuración guardada")
-                        time.sleep(1)
-                        st.rerun()
-                    else:
-                        st.error("❌ Error al guardar")
-        
-        with tab2:
-            st.markdown("### Editar Premios")
-            premios_editables = []
-            for i, p in enumerate(premios):
-                with st.container():
-                    col1, col2, col3, col4 = st.columns([1, 3, 3, 1])
-                    with col1:
-                        icono = st.text_input(f"Icono {i+1}", value=p['icono'], key=f"icono_{i}")
-                    with col2:
-                        titulo = st.text_input(f"Título {i+1}", value=p['titulo'], key=f"titulo_{i}")
-                    with col3:
-                        desc = st.text_input(f"Descripción {i+1}", value=p['descripcion'], key=f"desc_{i}")
-                    with col4:
-                        orden = st.number_input(f"Orden {i+1}", value=p['orden'], key=f"orden_{i}", min_value=1, max_value=10)
-                    premios_editables.append({"icono": icono, "titulo": titulo, "descripcion": desc, "orden": orden})
-            
-            if st.button("💾 Guardar Premios"):
-                if guardar_premios(premios_editables):
-                    st.success("✅ Premios guardados")
-                    time.sleep(1)
-                    st.rerun()
-                else:
-                    st.error("❌ Error al guardar")
-        
-        with tab3:
-            st.markdown("### Gestión de Usuarios")
-            st.info("📌 Para agregar o modificar usuarios, editá directamente el Google Sheet en la pestaña 'Usuarios'")
-            st.markdown("""
-            **Estructura de la pestaña Usuarios:**
-            - Columna A: Usuario
-            - Columna B: Contraseña (texto plano)
-            - Columna C: Rol (admin / editor)
-            - Columna D: Activo (SI / NO)
-            
-            **Ejemplo:**
-            | administrador | 124578 | admin | SI |
-            | editor | 123456 | editor | SI |
-            """)
+        if st.form_submit_button("💾 Guardar Configuración", use_container_width=True):
+            nueva_config = {
+                "titulo": nuevo_titulo,
+                "subtitulo": nuevo_subtitulo,
+                "color_principal": nuevo_color_principal,
+                "color_secundario": nuevo_color_secundario,
+                "precio_unidad": str(nuevo_precio),
+                "precio_promo": str(nuevo_precio_promo),
+                "cantidad_promo": "2",
+                "alias": nuevo_alias,
+                "telefono": nuevo_telefono,
+                "sorteo_texto": nuevo_sorteo,
+                "fecha_sorteo": nueva_fecha,
+                "footer_texto": config.get("footer_texto", "¡Gracias por participar!")
+            }
+            if guardar_config(nueva_config):
+                st.success("✅ Configuración guardada")
+                time.sleep(1)
+                st.rerun()
+            else:
+                st.error("❌ Error al guardar")
     
-    else:
-        # Editor: solo puede personalizar visual
-        st.markdown("### 🎨 Personalización Visual")
-        st.info("Como Editor, podés modificar colores, textos, precios y fecha del sorteo")
+    st.markdown("---")
+    
+    # ========== PREMIOS (Admin y Editor pueden) ==========
+    st.markdown("### 🎁 Editar Premios")
+    premios_editables = []
+    for i, p in enumerate(premios):
+        with st.container():
+            col1, col2, col3, col4 = st.columns([1, 3, 3, 1])
+            with col1:
+                icono = st.text_input(f"Icono {i+1}", value=p['icono'], key=f"icono_{i}")
+            with col2:
+                titulo = st.text_input(f"Título {i+1}", value=p['titulo'], key=f"titulo_{i}")
+            with col3:
+                desc = st.text_input(f"Descripción {i+1}", value=p['descripcion'], key=f"desc_{i}")
+            with col4:
+                orden = st.number_input(f"Orden {i+1}", value=p['orden'], key=f"orden_{i}", min_value=1, max_value=10)
+            premios_editables.append({"icono": icono, "titulo": titulo, "descripcion": desc, "orden": orden})
+    
+    if st.button("💾 Guardar Premios", use_container_width=True):
+        if guardar_premios(premios_editables):
+            st.success("✅ Premios guardados")
+            time.sleep(1)
+            st.rerun()
+        else:
+            st.error("❌ Error al guardar")
+    
+    # ========== USUARIOS (SOLO ADMIN) ==========
+    if st.session_state.user_role == "admin":
+        st.markdown("---")
+        st.markdown("### 👥 Gestión de Usuarios")
+        st.info("📌 Para agregar o modificar usuarios, editá directamente el Google Sheet en la pestaña 'Usuarios'")
+        st.markdown("""
+        **Estructura de la pestaña Usuarios:**
+        - Columna A: Usuario
+        - Columna B: Contraseña (texto plano)
+        - Columna C: Rol (admin / editor)
+        - Columna D: Activo (SI / NO)
         
-        with st.form("editor_form"):
-            nuevo_titulo = st.text_input("Título", value=config.get("titulo", "SUPER RIFA"))
-            nuevo_subtitulo = st.text_input("Subtítulo", value=config.get("subtitulo", "PARA EQUIPAR MI BARBERÍA"))
-            nuevo_color_principal = st.color_picker("Color principal", value=config.get("color_principal", "#1e3a5f"))
-            nuevo_color_secundario = st.color_picker("Color secundario", value=config.get("color_secundario", "#c9a03d"))
-            nuevo_precio = st.number_input("Precio por número ($)", value=int(config.get("precio_unidad", 3000)))
-            nuevo_precio_promo = st.number_input("Precio promoción 2x ($)", value=int(config.get("precio_promo", 5000)))
-            nuevo_alias = st.text_input("Alias de transferencia", value=config.get("alias", "Tomas.130611"))
-            nuevo_telefono = st.text_input("WhatsApp", value=config.get("telefono", "3826448225"))
-            nuevo_sorteo = st.text_input("Texto del sorteo", value=config.get("sorteo_texto", "Quiniela Nacional Matutina"))
-            nueva_fecha = st.text_input("📅 Fecha del sorteo", value=config.get("fecha_sorteo", "Pendiente"))
-            
-            if st.form_submit_button("💾 Guardar Cambios"):
-                nueva_config = {
-                    "titulo": nuevo_titulo,
-                    "subtitulo": nuevo_subtitulo,
-                    "color_principal": nuevo_color_principal,
-                    "color_secundario": nuevo_color_secundario,
-                    "precio_unidad": str(nuevo_precio),
-                    "precio_promo": str(nuevo_precio_promo),
-                    "cantidad_promo": "2",
-                    "alias": nuevo_alias,
-                    "telefono": nuevo_telefono,
-                    "sorteo_texto": nuevo_sorteo,
-                    "fecha_sorteo": nueva_fecha,
-                    "footer_texto": config.get("footer_texto", "¡Gracias por participar!")
-                }
-                if guardar_config(nueva_config):
-                    st.success("✅ Cambios guardados")
-                    time.sleep(1)
-                    st.rerun()
-                else:
-                    st.error("❌ Error al guardar")
+        **Ejemplo:**
+        | administrador | 124578 | admin | SI |
+        | editor | 123456 | editor | SI |
+        """)
 
 # ========== GENERAR CSS PERSONALIZADO ==========
 def generar_css(config):
@@ -442,21 +390,17 @@ def generar_imagen_rifa():
 
 # ========== VISTA PÚBLICA DE LA RIFA ==========
 def mostrar_rifa_publica(config, premios):
-    # CSS personalizado
     st.markdown(generar_css(config), unsafe_allow_html=True)
     
-    # Título
     st.markdown(f'<div class="main-title">✂️ {config.get("titulo", "SUPER RIFA")} ✂️</div>', unsafe_allow_html=True)
     st.markdown(f'<div class="sub-title">{config.get("subtitulo", "PARA EQUIPAR MI BARBERÍA")}</div>', unsafe_allow_html=True)
     
-    # Premios
     if premios:
         cols = st.columns(min(len(premios), 5))
         for i, premio in enumerate(premios[:5]):
             with cols[i % 5]:
                 st.markdown(f'<div class="premio-card"><div class="premio-numero">{i+1}°</div><b>{premio["titulo"]}</b><br><small>{premio["descripcion"]}</small></div>', unsafe_allow_html=True)
     
-    # Precios
     precio_unidad = int(config.get("precio_unidad", 3000))
     precio_promo = int(config.get("precio_promo", 5000))
     cantidad_promo = int(config.get("cantidad_promo", 2))
@@ -464,14 +408,12 @@ def mostrar_rifa_publica(config, premios):
     st.markdown(f'<div class="info-card"><h3>🎲 NÚMEROS DEL 00 AL 99</h3><div class="precio-destacado">${precio_unidad:,} CADA NÚMERO</div></div>', unsafe_allow_html=True)
     st.markdown(f'<div class="promo-oferta"><p>🎁 ¡PROMOCIÓN ESPECIAL! 🎁</p><span>{cantidad_promo} NÚMEROS POR ${precio_promo:,}</span></div>', unsafe_allow_html=True)
     
-    # Fecha del sorteo
     fecha_sorteo = config.get("fecha_sorteo", "Pendiente")
     if fecha_sorteo and fecha_sorteo != "Pendiente":
         st.markdown(f'<div class="fecha-box"><strong>📅 Fecha del sorteo:</strong> {fecha_sorteo}</div>', unsafe_allow_html=True)
     else:
         st.markdown(f'<div class="fecha-box"><strong>📅 Sorteo:</strong> Se realizará cuando se completen todos los números</div>', unsafe_allow_html=True)
     
-    # Mensaje orientación
     st.markdown("""
     <div class="orientacion-box">
         📱 <strong>¿Usás el celular?</strong><br>
@@ -479,13 +421,11 @@ def mostrar_rifa_publica(config, premios):
     </div>
     """, unsafe_allow_html=True)
     
-    # Cargar números
     df = cargar_numeros()
     
     st.markdown("### 🎲 ¡ELEGÍ TUS NÚMEROS!")
     st.markdown("🟢 **Verde = Disponible** | 🟠 **Reservado** | 🔴 **Vendido**")
     
-    # Botones de números
     if not df.empty:
         estados = {}
         for _, row in df.iterrows():
@@ -509,11 +449,9 @@ def mostrar_rifa_publica(config, premios):
                         else:
                             st.button(f"🔴 {numero}", key=f"btn_{numero}", disabled=True, use_container_width=True)
     
-    # Formulario de reserva
     if 'numero_seleccionado' in st.session_state and st.session_state.numero_seleccionado:
         numero_sel = st.session_state.numero_seleccionado
         
-        # Verificar disponibilidad
         df_actual = cargar_numeros()
         estado_actual = "Disponible"
         fila_numero = None
@@ -549,7 +487,6 @@ def mostrar_rifa_publica(config, premios):
                         else:
                             st.error("❌ Error al reservar")
     
-    # Footer con fecha condicional
     fecha_sorteo = config.get("fecha_sorteo", "Pendiente")
     if fecha_sorteo and fecha_sorteo != "Pendiente":
         st.markdown(f'<div class="sorteo-texto">🎲 SORTEO POR {config.get("sorteo_texto", "QUINIELA NACIONAL MATUTINA")} - {fecha_sorteo} 🎲</div>', unsafe_allow_html=True)
@@ -558,7 +495,6 @@ def mostrar_rifa_publica(config, premios):
     
     st.markdown(f'<div class="pago-texto">💰 PAGOS POR TRANSFERENCIA AL ALIAS:<br><div class="alias-destacado">{config.get("alias", "Tomas.130611")}</div></div>', unsafe_allow_html=True)
     
-    # Imagen actualizada
     st.markdown("---")
     st.markdown("### 📸 Vista previa de la rifa")
     imagen = generar_imagen_rifa()
@@ -618,13 +554,9 @@ def mostrar_sidebar(config):
 
 # ========== MAIN ==========
 def main():
-    # Cargar configuración
     config = cargar_config()
-    
-    # Mostrar sidebar siempre
     mostrar_sidebar(config)
     
-    # Verificar si está logueado
     if st.session_state.logged_in:
         premios = cargar_premios()
         mostrar_admin_panel(config, premios)
