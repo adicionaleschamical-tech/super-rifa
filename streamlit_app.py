@@ -87,6 +87,26 @@ def obtener_config_default():
         "mostrar_orientacion": "SI"
     }
 
+def limpiar_titulo_premio(titulo, posicion):
+    """Limpia el título del premio removiendo palabras como 'Lugar' y 'Premio'"""
+    if not titulo:
+        return ""
+    
+    # Remover "Lugar" y "Premio" del título si están presentes
+    titulo_limpio = titulo
+    # Remover patrones como "1° Lugar", "2° Lugar", etc.
+    import re
+    titulo_limpio = re.sub(r'\d+°\s*Lugar\s*', '', titulo_limpio)
+    titulo_limpio = re.sub(r'Premio\s+\d+°\s*', '', titulo_limpio)
+    titulo_limpio = re.sub(r'Lugar\s*', '', titulo_limpio)
+    titulo_limpio = titulo_limpio.strip()
+    
+    # Si después de limpiar queda vacío, usar un título por defecto
+    if not titulo_limpio:
+        return f"Premio {posicion}°"
+    
+    return titulo_limpio
+
 def cargar_premios():
     """Cargar premios desde Google Sheets"""
     if client:
@@ -98,16 +118,17 @@ def cargar_premios():
             # Saltar encabezado
             for idx, fila in enumerate(datos[1:], start=1):
                 if len(fila) >= 3:
+                    titulo_original = fila[1] if len(fila) > 1 else ""
+                    # Limpiar el título automáticamente
+                    titulo_limpio = limpiar_titulo_premio(titulo_original, idx)
+                    
                     premio = {
                         "icono": fila[0] if len(fila) > 0 else "🎁",
-                        "titulo": fila[1] if len(fila) > 1 else "",
+                        "titulo": titulo_limpio,
                         "descripcion": fila[2] if len(fila) > 2 else "",
                         "orden": idx,
                         "premio_extra": fila[4] if len(fila) > 4 else ""
                     }
-                    # Si el título está vacío, usar un título por defecto
-                    if not premio["titulo"]:
-                        premio["titulo"] = f"Premio {idx}°"
                     premios.append(premio)
             
             # Si no hay premios, crear los 20 por defecto
@@ -252,6 +273,25 @@ def regenerar_numeros(cantidad, inicio):
     except:
         return False
 
+def limpiar_todos_los_premios():
+    """Función para limpiar todos los títulos de premios existentes"""
+    if not client:
+        return False
+    
+    try:
+        premios_actuales = cargar_premios()
+        
+        # Limpiar todos los títulos
+        for i, premio in enumerate(premios_actuales, start=1):
+            premio['titulo'] = limpiar_titulo_premio(premio['titulo'], i)
+            premio['orden'] = i
+        
+        # Guardar los premios limpios
+        return guardar_premios(premios_actuales)
+    except Exception as e:
+        st.error(f"Error al limpiar premios: {e}")
+        return False
+
 # ========== MOSTRAR LOGIN ==========
 def mostrar_login():
     st.markdown("### 🔐 Acceso al Panel de Administración")
@@ -291,6 +331,18 @@ def mostrar_admin_panel(config, premios):
             st.rerun()
     
     st.markdown("---")
+    
+    # Botón para limpiar todos los premios (solo admin)
+    if st.session_state.user_role == "admin":
+        with st.expander("🧹 Herramientas de Limpieza", expanded=False):
+            st.warning("⚠️ Esta herramienta eliminará la palabra 'Lugar' de todos los títulos de premios.")
+            if st.button("🗑️ LIMPIAR TÍTULOS DE PREMIOS", use_container_width=True, type="secondary"):
+                if limpiar_todos_los_premios():
+                    st.success("✅ ¡Todos los títulos de premios han sido limpiados!")
+                    time.sleep(1)
+                    st.rerun()
+                else:
+                    st.error("❌ Error al limpiar los premios")
     
     # ========== CONFIGURACIÓN GENERAL ==========
     with st.expander("⚙️ Configuración General", expanded=True):
@@ -403,7 +455,9 @@ def mostrar_admin_panel(config, premios):
                 with col1:
                     nuevo_icono = st.text_input("Icono", value=p['icono'], key=f"icono_{idx}", help="Ej: 🏆, 🎁, ✂️, etc.")
                 with col2:
-                    nuevo_titulo = st.text_input("Nombre del Premio", value=p['titulo'], key=f"titulo_{idx}", 
+                    # Mostrar el título actual ya limpio
+                    valor_titulo = p['titulo']
+                    nuevo_titulo = st.text_input("Nombre del Premio", value=valor_titulo, key=f"titulo_{idx}", 
                                                 placeholder="Ej: Jarra térmica, Corte de pelo, etc.")
                 with col3:
                     nueva_desc = st.text_input("Descripción", value=p['descripcion'], key=f"desc_{idx}", 
@@ -572,7 +626,7 @@ def mostrar_rifa_publica(config, premios):
         for i in range(min(5, len(premios))):
             premio = premios[i]
             with cols[i]:
-                # Mostrar solo el título del premio, no incluir "Lugar"
+                # Mostrar solo el título del premio, ya está limpio
                 titulo_mostrar = premio["titulo"] if premio["titulo"] else f"Premio {i+1}°"
                 premio_extra_html = f'<div class="premio-extra">{premio.get("premio_extra", "")}</div>' if premio.get("premio_extra") else ""
                 st.markdown(f'<div class="premio-card"><div class="premio-numero">{i+1}°</div><b>{titulo_mostrar}</b><br><small>{premio["descripcion"]}</small>{premio_extra_html}</div>', unsafe_allow_html=True)
