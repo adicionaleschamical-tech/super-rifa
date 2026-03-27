@@ -23,7 +23,7 @@ st.markdown("""
 .pago-texto { text-align: center; margin-top: 15px; padding: 15px; background: #1e3a5f; border-radius: 15px; color: white; }
 .alias-destacado { font-size: 1.3em; font-weight: bold; color: #c9a03d; background: rgba(255,255,255,0.1); display: inline-block; padding: 6px 16px; border-radius: 30px; }
 
-/* Botones - más grandes y legibles */
+/* Botones */
 .stButton button {
     background-color: #10b981 !important;
     color: white !important;
@@ -54,14 +54,27 @@ button[kind="secondary"][disabled] {
     background-color: #ef4444 !important;
 }
 
-/* Ajustes para móvil */
+/* Ajustes para móvil - 4 columnas */
 @media (max-width: 768px) {
     .stButton button {
-        padding: 10px 3px !important;
-        font-size: 13px !important;
+        padding: 10px 4px !important;
+        font-size: 14px !important;
     }
-    .premio-card { padding: 10px 4px; font-size: 11px; }
-    .premio-numero { width: 30px; height: 30px; font-size: 12px; }
+    .premio-card { padding: 8px 4px; font-size: 10px; }
+    .premio-numero { width: 28px; height: 28px; font-size: 11px; }
+    .main-title { font-size: 1.5em; }
+}
+
+/* Forzar que las columnas no se apilen en móvil */
+@media (max-width: 768px) {
+    .row-widget.stHorizontal {
+        flex-wrap: nowrap !important;
+        gap: 6px !important;
+    }
+    .row-widget.stHorizontal > div {
+        flex: 1 1 0 !important;
+        min-width: 0 !important;
+    }
 }
 </style>
 """, unsafe_allow_html=True)
@@ -102,12 +115,12 @@ st.markdown("🟢 **Verde = Disponible** | 🟠 **Reservado** | 🔴 **Vendido**
 if 'numero_seleccionado' not in st.session_state:
     st.session_state.numero_seleccionado = None
 
-# ========== 5 COLUMNAS x 20 FILAS ==========
-# Esto funciona perfecto en móvil vertical
-for fila in range(20):  # 20 filas
-    columnas = st.columns(5)  # 5 columnas por fila
-    for col_idx in range(5):
-        numero_num = fila * 5 + col_idx
+# ========== 4 COLUMNAS x 25 FILAS ==========
+# Esto debería funcionar en móvil vertical
+for fila in range(25):  # 25 filas
+    columnas = st.columns(4)  # 4 columnas por fila
+    for col_idx in range(4):
+        numero_num = fila * 4 + col_idx
         if numero_num <= 99:
             numero = f"{numero_num:02d}"
             
