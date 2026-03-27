@@ -4,182 +4,366 @@ from google.oauth2.service_account import Credentials
 import pandas as pd
 import time
 import json
+import hashlib
 from PIL import Image, ImageDraw, ImageFont
 import io
 
 st.set_page_config(page_title="SUPER RIFA", page_icon="✂️", layout="wide")
 
-# ========== CSS ==========
-st.markdown("""
-<style>
-.stApp { background: linear-gradient(135deg, #f8f9fa 0%, #f0f2f5 100%); }
-.main-title { text-align: center; font-size: 2.2em; font-weight: 800; background: linear-gradient(135deg, #1e3a5f, #2c5282); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-.sub-title { text-align: center; font-size: 1.2em; color: #4a5568; margin-top: -10px; }
-.premio-card { background: white; border-radius: 20px; padding: 15px 10px; text-align: center; box-shadow: 0 5px 20px rgba(0,0,0,0.08); margin: 5px; }
-.premio-numero { background: #1e3a5f; color: white; width: 35px; height: 35px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 10px; font-size: 14px; }
-.info-card { background: #1e3a5f; border-radius: 20px; padding: 20px; color: white; text-align: center; margin: 15px 0; }
-.precio-destacado { font-size: 1.8em; font-weight: bold; color: #c9a03d; }
-.promo-oferta { background: #c9a03d; border-radius: 20px; padding: 15px; text-align: center; margin: 15px 0; animation: pulse 1.5s infinite; }
-@keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.02); } 100% { transform: scale(1); } }
-.sorteo-texto { text-align: center; margin-top: 20px; padding: 12px; background: #1e3a5f; border-radius: 15px; color: white; font-size: 14px; }
-.pago-texto { text-align: center; margin-top: 15px; padding: 15px; background: #1e3a5f; border-radius: 15px; color: white; }
-.alias-destacado { font-size: 1.3em; font-weight: bold; color: #c9a03d; background: rgba(255,255,255,0.1); display: inline-block; padding: 6px 16px; border-radius: 30px; }
-.orientacion-box { background: #fef3c7; border-left: 5px solid #c9a03d; padding: 15px; margin: 20px 0; border-radius: 12px; text-align: center; }
-
-/* Botones */
-.stButton button {
-    background-color: #10b981 !important;
-    color: white !important;
-    border: none !important;
-    border-radius: 12px !important;
-    padding: 12px 5px !important;
-    font-size: 15px !important;
-    font-weight: bold !important;
-    width: 100% !important;
-    cursor: pointer !important;
-}
-
-.stButton button:hover {
-    background-color: #059669 !important;
-}
-
-.stButton button:disabled {
-    background-color: #f59e0b !important;
-    cursor: not-allowed !important;
-}
-
-button[kind="secondary"][disabled] {
-    background-color: #ef4444 !important;
-}
-
-@media (max-width: 768px) {
-    .stButton button {
-        padding: 10px 3px !important;
-        font-size: 13px !important;
-    }
-}
-</style>
-""", unsafe_allow_html=True)
-
-# ========== TÍTULO ==========
-st.markdown('<div class="main-title">✂️ SUPER RIFA! ✂️</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-title">PARA EQUIPAR MI BARBERÍA</div>', unsafe_allow_html=True)
-
-# ========== PREMIOS ==========
-col1, col2, col3, col4, col5 = st.columns(5)
-premios_texto = ["JARRA TÉRMICA<br>2 litros", "ROPA INTERIOR<br>Conjunto femenino", "TIENDA GABRIELA<br>Premio sorpresa", "BARBERÍA CANICHE<br>Corte de pelo", "PASTAFROLA<br>Una pastafrola"]
-for i, col in enumerate([col1, col2, col3, col4, col5]):
-    with col:
-        st.markdown(f'<div class="premio-card"><div class="premio-numero">{i+1}°</div>{premios_texto[i]}</div>', unsafe_allow_html=True)
-
-st.markdown('<div class="info-card"><h3>🎲 NÚMEROS DEL 00 AL 99</h3><div class="precio-destacado">$3.000 CADA NÚMERO</div></div>', unsafe_allow_html=True)
-st.markdown('<div class="promo-oferta"><p>🎁 ¡PROMOCIÓN ESPECIAL! 🎁</p><span>2 NÚMEROS POR $5.000</span></div>', unsafe_allow_html=True)
-
-# ========== MENSAJE DE ORIENTACIÓN ==========
-st.markdown("""
-<div class="orientacion-box">
-    📱 <strong>¿Usás el celular?</strong><br>
-    🔄 <strong>GIRÁ LA PANTALLA A HORIZONTAL (landscape)</strong> para ver los números en grilla
-</div>
-""", unsafe_allow_html=True)
+# ========== INICIALIZAR SESSION STATE ==========
+if 'logged_in' not in st.session_state:
+    st.session_state.logged_in = False
+if 'user_role' not in st.session_state:
+    st.session_state.user_role = None
+if 'username' not in st.session_state:
+    st.session_state.username = None
 
 # ========== CONEXIÓN GOOGLE SHEETS ==========
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
 
-try:
-    creds_dict = json.loads(st.secrets["google_credentials"])
-    creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
-    client = gspread.authorize(creds)
-    sheet = client.open("Rifa").sheet1
-except Exception as e:
-    st.error(f"❌ Error de conexión: {str(e)}")
-    st.stop()
+@st.cache_resource
+def conectar_google_sheets():
+    try:
+        creds_dict = json.loads(st.secrets["google_credentials"])
+        creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
+        client = gspread.authorize(creds)
+        return client
+    except Exception as e:
+        st.error(f"❌ Error de conexión: {str(e)}")
+        return None
 
-# Leer datos
-datos = sheet.get_all_values()
-df = pd.DataFrame(datos[1:], columns=datos[0])
+client = conectar_google_sheets()
 
-st.markdown("### 🎲 ¡ELEGÍ TUS NÚMEROS!")
-st.markdown("🟢 **Verde = Disponible** | 🟠 **Reservado** | 🔴 **Vendido**")
+# ========== FUNCIÓN DE LOGIN ==========
+def verificar_usuario(username, password):
+    """Verificar usuario en Google Sheets"""
+    if not client:
+        return False, None
+    
+    try:
+        sheet = client.open("Rifa").worksheet("Usuarios")
+        datos = sheet.get_all_values()
+        
+        # Buscar usuario
+        for fila in datos[1:]:  # Saltar encabezado
+            if len(fila) >= 4 and fila[0] == username and fila[3] == "SI":  # Activo = SI
+                # Verificar contraseña
+                hash_ingresado = hashlib.sha256(password.encode()).hexdigest()
+                if hash_ingresado == fila[1]:
+                    return True, fila[2]  # rol
+        return False, None
+    except Exception as e:
+        st.error(f"Error de verificación: {e}")
+        return False, None
 
-# Inicializar número seleccionado
-if 'numero_seleccionado' not in st.session_state:
-    st.session_state.numero_seleccionado = None
+# ========== FUNCIONES PARA CARGAR DATOS ==========
+def cargar_config():
+    """Cargar configuración desde Google Sheets"""
+    if client:
+        try:
+            sheet = client.open("Rifa").worksheet("Config")
+            datos = sheet.get_all_values()
+            config = {}
+            for fila in datos[1:]:
+                if len(fila) >= 2:
+                    config[fila[0]] = fila[1]
+            return config
+        except:
+            return obtener_config_default()
+    return obtener_config_default()
 
-# ========== BOTONES INTERACTIVOS (5 COLUMNAS x 20 FILAS) ==========
-for fila in range(20):
-    columnas = st.columns(5)
-    for col_idx in range(5):
-        numero_num = fila * 5 + col_idx
-        if numero_num <= 99:
-            numero = f"{numero_num:02d}"
-            
-            estado = "Disponible"
-            for _, row in df.iterrows():
-                if str(row['Número']).strip() == numero:
-                    estado = row['Estado']
-                    break
-            
-            with columnas[col_idx]:
-                if estado == "Disponible":
-                    if st.button(f"🟢 {numero}", key=f"btn_{numero}", use_container_width=True):
-                        st.session_state.numero_seleccionado = numero
-                        st.rerun()
-                elif estado == "Reservado":
-                    st.button(f"🟠 {numero}", key=f"btn_{numero}", disabled=True, use_container_width=True)
+def obtener_config_default():
+    return {
+        "titulo": "SUPER RIFA",
+        "subtitulo": "PARA EQUIPAR MI BARBERÍA",
+        "color_principal": "#1e3a5f",
+        "color_secundario": "#c9a03d",
+        "precio_unidad": "3000",
+        "precio_promo": "5000",
+        "cantidad_promo": "2",
+        "alias": "Tomas.130611",
+        "telefono": "3826448225",
+        "sorteo_texto": "Quiniela Nacional Matutina",
+        "footer_texto": "¡Gracias por participar!"
+    }
+
+def cargar_premios():
+    """Cargar premios desde Google Sheets"""
+    if client:
+        try:
+            sheet = client.open("Rifa").worksheet("Premios")
+            datos = sheet.get_all_values()
+            premios = []
+            for fila in datos[1:]:
+                if len(fila) >= 4:
+                    premios.append({
+                        "icono": fila[0],
+                        "titulo": fila[1],
+                        "descripcion": fila[2],
+                        "orden": int(fila[3]) if fila[3] and fila[3].isdigit() else 99
+                    })
+            return sorted(premios, key=lambda x: x['orden'])
+        except:
+            return obtener_premios_default()
+    return obtener_premios_default()
+
+def obtener_premios_default():
+    return [
+        {"icono": "🏆", "titulo": "Jarra térmica", "descripcion": "2 litros", "orden": 1},
+        {"icono": "👙", "titulo": "Ropa interior", "descripcion": "Conjunto femenino", "orden": 2},
+        {"icono": "🎁", "titulo": "Tienda Gabriela", "descripcion": "Premio sorpresa", "orden": 3},
+        {"icono": "✂️", "titulo": "Barbería Caniche", "descripcion": "Corte de pelo", "orden": 4},
+        {"icono": "🍰", "titulo": "Pastafrola", "descripcion": "Casera", "orden": 5}
+    ]
+
+def cargar_numeros():
+    """Cargar números desde Google Sheets"""
+    if client:
+        try:
+            sheet = client.open("Rifa").worksheet("Numeros")
+            datos = sheet.get_all_values()
+            if len(datos) > 1:
+                return pd.DataFrame(datos[1:], columns=datos[0])
+        except:
+            pass
+    return pd.DataFrame(columns=["Número", "Estado", "Nombre", "DNI", "Teléfono"])
+
+def actualizar_estado(numero, estado, nombre="", dni="", telefono=""):
+    """Actualizar estado de un número"""
+    if client:
+        try:
+            sheet = client.open("Rifa").worksheet("Numeros")
+            celda = sheet.find(numero)
+            if celda:
+                sheet.update_cell(celda.row, 2, estado)
+                sheet.update_cell(celda.row, 3, nombre)
+                sheet.update_cell(celda.row, 4, dni)
+                sheet.update_cell(celda.row, 5, telefono)
+                return True
+        except:
+            pass
+    return False
+
+# ========== FUNCIONES DE ADMINISTRACIÓN ==========
+def guardar_config(config):
+    """Guardar configuración (solo admin)"""
+    if not client or st.session_state.user_role != "admin":
+        return False
+    try:
+        sheet = client.open("Rifa").worksheet("Config")
+        for idx, (clave, valor) in enumerate(config.items(), start=2):
+            sheet.update_cell(idx, 1, clave)
+            sheet.update_cell(idx, 2, str(valor))
+        return True
+    except:
+        return False
+
+def guardar_premios(premios):
+    """Guardar premios (solo admin)"""
+    if not client or st.session_state.user_role != "admin":
+        return False
+    try:
+        sheet = client.open("Rifa").worksheet("Premios")
+        # Obtener todas las filas
+        todas_filas = sheet.get_all_values()
+        if len(todas_filas) > 1:
+            # Limpiar desde fila 2 hasta el final
+            for i in range(len(todas_filas), 1, -1):
+                sheet.delete_rows(i)
+        
+        # Escribir nuevos datos
+        for i, p in enumerate(premios, start=2):
+            sheet.update_cell(i, 1, p['icono'])
+            sheet.update_cell(i, 2, p['titulo'])
+            sheet.update_cell(i, 3, p['descripcion'])
+            sheet.update_cell(i, 4, p['orden'])
+        return True
+    except Exception as e:
+        st.error(f"Error: {e}")
+        return False
+
+# ========== MOSTRAR LOGIN ==========
+def mostrar_login():
+    st.markdown("### 🔐 Acceso al Panel de Administración")
+    st.markdown("Ingresá tus credenciales para personalizar la rifa")
+    
+    with st.form("login_form"):
+        username = st.text_input("Usuario")
+        password = st.text_input("Contraseña", type="password")
+        submitted = st.form_submit_button("Ingresar", use_container_width=True)
+        
+        if submitted:
+            if username and password:
+                valido, rol = verificar_usuario(username, password)
+                if valido:
+                    st.session_state.logged_in = True
+                    st.session_state.user_role = rol
+                    st.session_state.username = username
+                    st.success(f"✅ Bienvenido {username}")
+                    time.sleep(1)
+                    st.rerun()
                 else:
-                    st.button(f"🔴 {numero}", key=f"btn_{numero}", disabled=True, use_container_width=True)
+                    st.error("❌ Usuario o contraseña incorrectos")
+            else:
+                st.error("❌ Complete todos los campos")
 
-# ========== FORMULARIO DE RESERVA ==========
-if st.session_state.numero_seleccionado:
-    numero_sel = st.session_state.numero_seleccionado
+# ========== PANEL DE ADMINISTRACIÓN ==========
+def mostrar_admin_panel(config, premios):
+    st.markdown(f"### 🔧 Panel de Administración")
+    st.markdown(f"👤 **Usuario:** {st.session_state.username} | **Rol:** {st.session_state.user_role}")
     
-    datos_actuales = sheet.get_all_values()
-    estado_actual = "Disponible"
-    fila_numero = None
-    for idx, fila in enumerate(datos_actuales[1:], start=2):
-        if fila[0] == numero_sel:
-            estado_actual = fila[1]
-            fila_numero = idx
-            break
-    
-    if estado_actual != "Disponible":
-        st.error(f"❌ El número {numero_sel} ya no está disponible.")
-        st.session_state.numero_seleccionado = None
+    if st.button("🚪 Cerrar sesión"):
+        st.session_state.logged_in = False
+        st.session_state.user_role = None
+        st.session_state.username = None
         st.rerun()
-    else:
-        with st.form("compra_form"):
-            st.markdown(f"### ✨ Número seleccionado: **{numero_sel}**")
-            nombre = st.text_input("📝 Nombre completo")
-            dni = st.text_input("🆔 DNI")
-            telefono = st.text_input("📱 Teléfono *")
-            st.markdown('<div style="background:#f7f9fc;padding:15px;border-radius:15px;border-left:4px solid #c9a03d"><strong>💰 PAGO:</strong> Transferencia al alias <strong style="color:#c9a03d">Tomas.130611</strong></div>', unsafe_allow_html=True)
-            
-            if st.form_submit_button("✅ RESERVAR", use_container_width=True):
-                if not telefono:
-                    st.error("❌ El teléfono es obligatorio")
-                else:
-                    try:
-                        sheet.update_cell(fila_numero, 2, "Reservado")
-                        sheet.update_cell(fila_numero, 3, nombre or "")
-                        sheet.update_cell(fila_numero, 4, dni or "")
-                        sheet.update_cell(fila_numero, 5, telefono)
-                        
-                        st.success(f"✅ ¡Número {numero_sel} reservado con éxito!")
-                        st.info(f"📌 Transferí a **Tomas.130611** para confirmar.")
-                        st.balloons()
-                        st.session_state.numero_seleccionado = None
-                        time.sleep(2)
+    
+    st.markdown("---")
+    
+    if st.session_state.user_role == "admin":
+        tab1, tab2, tab3 = st.tabs(["⚙️ Configuración", "🎁 Premios", "👥 Usuarios"])
+        
+        with tab1:
+            st.markdown("### Configuración General")
+            with st.form("config_form"):
+                nuevo_titulo = st.text_input("Título", value=config.get("titulo", "SUPER RIFA"))
+                nuevo_subtitulo = st.text_input("Subtítulo", value=config.get("subtitulo", "PARA EQUIPAR MI BARBERÍA"))
+                nuevo_color_principal = st.color_picker("Color principal", value=config.get("color_principal", "#1e3a5f"))
+                nuevo_color_secundario = st.color_picker("Color secundario", value=config.get("color_secundario", "#c9a03d"))
+                nuevo_precio = st.number_input("Precio por número ($)", value=int(config.get("precio_unidad", 3000)))
+                nuevo_precio_promo = st.number_input("Precio promoción 2x ($)", value=int(config.get("precio_promo", 5000)))
+                nuevo_alias = st.text_input("Alias de transferencia", value=config.get("alias", "Tomas.130611"))
+                nuevo_telefono = st.text_input("WhatsApp", value=config.get("telefono", "3826448225"))
+                nuevo_sorteo = st.text_input("Texto del sorteo", value=config.get("sorteo_texto", "Quiniela Nacional Matutina"))
+                
+                if st.form_submit_button("💾 Guardar Configuración"):
+                    nueva_config = {
+                        "titulo": nuevo_titulo,
+                        "subtitulo": nuevo_subtitulo,
+                        "color_principal": nuevo_color_principal,
+                        "color_secundario": nuevo_color_secundario,
+                        "precio_unidad": str(nuevo_precio),
+                        "precio_promo": str(nuevo_precio_promo),
+                        "cantidad_promo": "2",
+                        "alias": nuevo_alias,
+                        "telefono": nuevo_telefono,
+                        "sorteo_texto": nuevo_sorteo,
+                        "footer_texto": config.get("footer_texto", "¡Gracias por participar!")
+                    }
+                    if guardar_config(nueva_config):
+                        st.success("✅ Configuración guardada")
+                        time.sleep(1)
                         st.rerun()
-                    except Exception as e:
-                        st.error(f"❌ Error al reservar: {str(e)}")
+                    else:
+                        st.error("❌ Error al guardar")
+        
+        with tab2:
+            st.markdown("### Editar Premios")
+            premios_editables = []
+            for i, p in enumerate(premios):
+                with st.container():
+                    col1, col2, col3, col4 = st.columns([1, 3, 3, 1])
+                    with col1:
+                        icono = st.text_input(f"Icono {i+1}", value=p['icono'], key=f"icono_{i}")
+                    with col2:
+                        titulo = st.text_input(f"Título {i+1}", value=p['titulo'], key=f"titulo_{i}")
+                    with col3:
+                        desc = st.text_input(f"Descripción {i+1}", value=p['descripcion'], key=f"desc_{i}")
+                    with col4:
+                        orden = st.number_input(f"Orden {i+1}", value=p['orden'], key=f"orden_{i}", min_value=1, max_value=10)
+                    premios_editables.append({"icono": icono, "titulo": titulo, "descripcion": desc, "orden": orden})
+            
+            if st.button("💾 Guardar Premios"):
+                if guardar_premios(premios_editables):
+                    st.success("✅ Premios guardados")
+                    time.sleep(1)
+                    st.rerun()
+                else:
+                    st.error("❌ Error al guardar")
+        
+        with tab3:
+            st.markdown("### Gestión de Usuarios")
+            st.info("📌 Solo administradores pueden crear/modificar usuarios")
+            
+            with st.form("nuevo_usuario"):
+                st.markdown("#### Agregar nuevo usuario")
+                nuevo_user = st.text_input("Usuario")
+                nueva_pass = st.text_input("Contraseña", type="password")
+                nuevo_rol = st.selectbox("Rol", ["editor", "admin"])
+                if st.form_submit_button("➕ Agregar Usuario"):
+                    if nuevo_user and nueva_pass:
+                        # Aquí iría la lógica para agregar usuario al Sheet
+                        st.info("Funcionalidad en desarrollo")
+                    else:
+                        st.error("Complete todos los campos")
+    
+    else:
+        # Editor: solo puede personalizar visual
+        st.markdown("### 🎨 Personalización Visual")
+        st.info("Como Editor, podés modificar colores, textos y precios")
+        
+        with st.form("editor_form"):
+            nuevo_titulo = st.text_input("Título", value=config.get("titulo", "SUPER RIFA"))
+            nuevo_subtitulo = st.text_input("Subtítulo", value=config.get("subtitulo", "PARA EQUIPAR MI BARBERÍA"))
+            nuevo_color_principal = st.color_picker("Color principal", value=config.get("color_principal", "#1e3a5f"))
+            nuevo_color_secundario = st.color_picker("Color secundario", value=config.get("color_secundario", "#c9a03d"))
+            nuevo_precio = st.number_input("Precio por número ($)", value=int(config.get("precio_unidad", 3000)))
+            nuevo_precio_promo = st.number_input("Precio promoción 2x ($)", value=int(config.get("precio_promo", 5000)))
+            
+            if st.form_submit_button("💾 Guardar Cambios"):
+                nueva_config = {
+                    "titulo": nuevo_titulo,
+                    "subtitulo": nuevo_subtitulo,
+                    "color_principal": nuevo_color_principal,
+                    "color_secundario": nuevo_color_secundario,
+                    "precio_unidad": str(nuevo_precio),
+                    "precio_promo": str(nuevo_precio_promo),
+                    "cantidad_promo": "2",
+                    "alias": config.get("alias", "Tomas.130611"),
+                    "telefono": config.get("telefono", "3826448225"),
+                    "sorteo_texto": config.get("sorteo_texto", "Quiniela Nacional Matutina"),
+                    "footer_texto": config.get("footer_texto", "¡Gracias por participar!")
+                }
+                if guardar_config(nueva_config):
+                    st.success("✅ Cambios guardados")
+                    time.sleep(1)
+                    st.rerun()
+                else:
+                    st.error("❌ Error al guardar")
+
+# ========== GENERAR CSS PERSONALIZADO ==========
+def generar_css(config):
+    color_principal = config.get("color_principal", "#1e3a5f")
+    color_secundario = config.get("color_secundario", "#c9a03d")
+    
+    return f"""
+    <style>
+    .stApp {{ background: linear-gradient(135deg, #f8f9fa 0%, #f0f2f5 100%); }}
+    .main-title {{ text-align: center; font-size: 2.2em; font-weight: 800; background: linear-gradient(135deg, {color_principal}, {color_principal}dd); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }}
+    .sub-title {{ text-align: center; font-size: 1.2em; color: #4a5568; margin-top: -10px; }}
+    .premio-card {{ background: white; border-radius: 20px; padding: 15px 10px; text-align: center; box-shadow: 0 5px 20px rgba(0,0,0,0.08); margin: 5px; }}
+    .premio-numero {{ background: {color_principal}; color: white; width: 35px; height: 35px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 10px; font-size: 14px; }}
+    .info-card {{ background: {color_principal}; border-radius: 20px; padding: 20px; color: white; text-align: center; margin: 15px 0; }}
+    .precio-destacado {{ font-size: 1.8em; font-weight: bold; color: {color_secundario}; }}
+    .promo-oferta {{ background: {color_secundario}; border-radius: 20px; padding: 15px; text-align: center; margin: 15px 0; animation: pulse 1.5s infinite; }}
+    @keyframes pulse {{ 0% {{ transform: scale(1); }} 50% {{ transform: scale(1.02); }} 100% {{ transform: scale(1); }} }}
+    .stButton button {{ background-color: #10b981 !important; color: white !important; border: none !important; border-radius: 12px !important; padding: 12px 5px !important; font-size: 15px !important; font-weight: bold !important; width: 100% !important; cursor: pointer !important; }}
+    .stButton button:hover {{ background-color: #059669 !important; }}
+    .stButton button:disabled {{ background-color: #f59e0b !important; cursor: not-allowed !important; }}
+    button[kind="secondary"][disabled] {{ background-color: #ef4444 !important; }}
+    .sorteo-texto {{ text-align: center; margin-top: 20px; padding: 12px; background: {color_principal}; border-radius: 15px; color: white; font-size: 14px; }}
+    .pago-texto {{ text-align: center; margin-top: 15px; padding: 15px; background: {color_principal}; border-radius: 15px; color: white; }}
+    .alias-destacado {{ font-size: 1.3em; font-weight: bold; color: {color_secundario}; background: rgba(255,255,255,0.1); display: inline-block; padding: 6px 16px; border-radius: 30px; }}
+    .orientacion-box {{ background: #fef3c7; border-left: 5px solid {color_secundario}; padding: 15px; margin: 20px 0; border-radius: 12px; text-align: center; }}
+    @media (max-width: 768px) {{ .stButton button {{ padding: 10px 3px !important; font-size: 13px !important; }} .premio-card {{ padding: 10px 4px; font-size: 11px; }} .premio-numero {{ width: 30px; height: 30px; font-size: 12px; }} }}
+    </style>
+    """
 
 # ========== FUNCIÓN PARA GENERAR IMAGEN ==========
 @st.cache_data(ttl=600)
 def generar_imagen_rifa():
-    """Genera imagen PNG con los números actualizados"""
     try:
-        # Leer datos actualizados
+        sheet = client.open("Rifa").worksheet("Numeros")
         datos = sheet.get_all_values()
         df_img = pd.DataFrame(datos[1:], columns=datos[0])
         
@@ -187,7 +371,6 @@ def generar_imagen_rifa():
         for _, row in df_img.iterrows():
             estados[str(row['Número']).strip()] = row['Estado']
         
-        # Configuración de la imagen
         ancho_celda = 55
         alto_celda = 55
         columnas = 10
@@ -204,10 +387,8 @@ def generar_imagen_rifa():
         except:
             fuente = ImageFont.load_default()
         
-        # Título
         draw.text((ancho_total//2 - 70, 10), "SUPER RIFA", fill='#1e3a5f', font=fuente)
         
-        # Cuadrícula
         for fila in range(filas):
             for col in range(columnas):
                 numero = f"{fila * columnas + col:02d}"
@@ -232,68 +413,190 @@ def generar_imagen_rifa():
         img.save(img_bytes, format='PNG')
         img_bytes.seek(0)
         return img_bytes
-    except Exception as e:
+    except:
         return None
 
-# ========== MOSTRAR IMAGEN ACTUALIZADA ==========
-st.markdown("---")
-st.markdown("### 📸 Vista previa de la rifa (actualizada cada 10 minutos)")
-
-imagen = generar_imagen_rifa()
-if imagen:
-    st.image(imagen, use_container_width=True)
-    st.caption(f"🕐 Última actualización: {time.strftime('%H:%M:%S')}")
+# ========== VISTA PÚBLICA DE LA RIFA ==========
+def mostrar_rifa_publica(config, premios):
+    # CSS personalizado
+    st.markdown(generar_css(config), unsafe_allow_html=True)
     
-    # Botón para descargar la imagen
-    st.download_button(
-        label="📥 Descargar imagen actualizada",
-        data=imagen,
-        file_name="rifa_actualizada.png",
-        mime="image/png"
-    )
-else:
-    st.error("Error al generar la imagen")
-
-# ========== FOOTER ==========
-st.markdown('<div class="sorteo-texto">🎲 SORTEO POR QUINIELA NACIONAL MATUTINA - AL VENDERSE TODOS LOS NÚMEROS 🎲</div>', unsafe_allow_html=True)
-st.markdown('<div class="pago-texto">💰 PAGOS POR TRANSFERENCIA AL ALIAS:<br><div class="alias-destacado">Tomas.130611</div></div>', unsafe_allow_html=True)
-
-# Sidebar
-with st.sidebar:
-    st.markdown("### ✂️ SUPER RIFA ✂️")
-    st.markdown("---")
+    # Título
+    st.markdown(f'<div class="main-title">✂️ {config.get("titulo", "SUPER RIFA")} ✂️</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="sub-title">{config.get("subtitulo", "PARA EQUIPAR MI BARBERÍA")}</div>', unsafe_allow_html=True)
+    
+    # Premios
+    if premios:
+        cols = st.columns(min(len(premios), 5))
+        for i, premio in enumerate(premios[:5]):
+            with cols[i % 5]:
+                st.markdown(f'<div class="premio-card"><div class="premio-numero">{i+1}°</div><b>{premio["titulo"]}</b><br><small>{premio["descripcion"]}</small></div>', unsafe_allow_html=True)
+    
+    # Precios
+    precio_unidad = int(config.get("precio_unidad", 3000))
+    precio_promo = int(config.get("precio_promo", 5000))
+    cantidad_promo = int(config.get("cantidad_promo", 2))
+    
+    st.markdown(f'<div class="info-card"><h3>🎲 NÚMEROS DEL 00 AL 99</h3><div class="precio-destacado">${precio_unidad:,} CADA NÚMERO</div></div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="promo-oferta"><p>🎁 ¡PROMOCIÓN ESPECIAL! 🎁</p><span>{cantidad_promo} NÚMEROS POR ${precio_promo:,}</span></div>', unsafe_allow_html=True)
+    
+    # Mensaje orientación
     st.markdown("""
-    **🎯 ¿CÓMO PARTICIPAR?**
+    <div class="orientacion-box">
+        📱 <strong>¿Usás el celular?</strong><br>
+        🔄 <strong>GIRÁ LA PANTALLA A HORIZONTAL (landscape)</strong> para ver los números en grilla
+    </div>
+    """, unsafe_allow_html=True)
     
-    1️⃣ Elegí un número **VERDE**
-    2️⃣ Completá tus datos
-    3️⃣ Transferí al alias: **Tomas.130611**
-    4️⃣ ¡Listo! Ya tenés tu número
+    # Cargar números
+    df = cargar_numeros()
     
-    ---
+    st.markdown("### 🎲 ¡ELEGÍ TUS NÚMEROS!")
+    st.markdown("🟢 **Verde = Disponible** | 🟠 **Reservado** | 🔴 **Vendido**")
     
-    **🎨 ESTADOS**
+    # Botones de números
+    if not df.empty:
+        estados = {}
+        for _, row in df.iterrows():
+            estados[str(row['Número']).strip()] = row['Estado']
+        
+        for fila in range(20):
+            columnas = st.columns(5)
+            for col_idx in range(5):
+                numero_num = fila * 5 + col_idx
+                if numero_num <= 99:
+                    numero = f"{numero_num:02d}"
+                    estado = estados.get(numero, "Disponible")
+                    
+                    with columnas[col_idx]:
+                        if estado == "Disponible":
+                            if st.button(f"🟢 {numero}", key=f"btn_{numero}", use_container_width=True):
+                                st.session_state.numero_seleccionado = numero
+                                st.rerun()
+                        elif estado == "Reservado":
+                            st.button(f"🟠 {numero}", key=f"btn_{numero}", disabled=True, use_container_width=True)
+                        else:
+                            st.button(f"🔴 {numero}", key=f"btn_{numero}", disabled=True, use_container_width=True)
     
-    🟢 Verde = Disponible  
-    🟠 Naranja = Reservado  
-    🔴 Rojo = Vendido
+    # Formulario de reserva
+    if 'numero_seleccionado' in st.session_state and st.session_state.numero_seleccionado:
+        numero_sel = st.session_state.numero_seleccionado
+        
+        # Verificar disponibilidad
+        df_actual = cargar_numeros()
+        estado_actual = "Disponible"
+        fila_numero = None
+        for idx, row in df_actual.iterrows():
+            if str(row['Número']).strip() == numero_sel:
+                estado_actual = row['Estado']
+                fila_numero = idx + 2
+                break
+        
+        if estado_actual != "Disponible":
+            st.error(f"❌ El número {numero_sel} ya no está disponible.")
+            st.session_state.numero_seleccionado = None
+            st.rerun()
+        else:
+            with st.form("compra_form"):
+                st.markdown(f"### ✨ Número seleccionado: **{numero_sel}**")
+                nombre = st.text_input("📝 Nombre completo")
+                dni = st.text_input("🆔 DNI")
+                telefono = st.text_input("📱 Teléfono *")
+                st.markdown(f'<div style="background:#f7f9fc;padding:15px;border-radius:15px;border-left:4px solid {config.get("color_secundario", "#c9a03d")}"><strong>💰 PAGO:</strong> Transferencia al alias <strong style="color:{config.get("color_secundario", "#c9a03d")}">{config.get("alias", "Tomas.130611")}</strong></div>', unsafe_allow_html=True)
+                
+                if st.form_submit_button("✅ RESERVAR", use_container_width=True):
+                    if not telefono:
+                        st.error("❌ El teléfono es obligatorio")
+                    else:
+                        if actualizar_estado(numero_sel, "Reservado", nombre, dni, telefono):
+                            st.success(f"✅ ¡Número {numero_sel} reservado con éxito!")
+                            st.info(f"📌 Transferí a **{config.get('alias', 'Tomas.130611')}** para confirmar.")
+                            st.balloons()
+                            st.session_state.numero_seleccionado = None
+                            time.sleep(2)
+                            st.rerun()
+                        else:
+                            st.error("❌ Error al reservar")
     
-    ---
+    # Footer
+    st.markdown(f'<div class="sorteo-texto">🎲 SORTEO POR {config.get("sorteo_texto", "QUINIELA NACIONAL MATUTINA")} - AL VENDERSE TODOS LOS NÚMEROS 🎲</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="pago-texto">💰 PAGOS POR TRANSFERENCIA AL ALIAS:<br><div class="alias-destacado">{config.get("alias", "Tomas.130611")}</div></div>', unsafe_allow_html=True)
     
-    **📅 SORTEO**
+    # Imagen actualizada
+    st.markdown("---")
+    st.markdown("### 📸 Vista previa de la rifa")
+    imagen = generar_imagen_rifa()
+    if imagen:
+        st.image(imagen, use_container_width=True)
+        st.download_button(
+            label="📥 Descargar imagen",
+            data=imagen,
+            file_name="rifa_actualizada.png",
+            mime="image/png"
+        )
+
+# ========== SIDEBAR ==========
+def mostrar_sidebar(config):
+    with st.sidebar:
+        st.markdown(f"### ✂️ {config.get('titulo', 'SUPER RIFA')}")
+        st.markdown("---")
+        st.markdown("""
+        **🎯 ¿CÓMO PARTICIPAR?**
+        
+        1️⃣ Elegí un número **VERDE**
+        2️⃣ Completá tus datos
+        3️⃣ Transferí al alias
+        4️⃣ ¡Listo! Ya tenés tu número
+        
+        ---
+        
+        **🎨 ESTADOS**
+        
+        🟢 Verde = Disponible  
+        🟠 Naranja = Reservado  
+        🔴 Rojo = Vendido
+        
+        ---
+        
+        **📅 SORTEO**
+        
+        🎲 Quiniela Nacional Matutina  
+        ⏰ Cuando se vendan todos los números
+        
+        ---
+        
+        **💎 PROMO ESPECIAL**
+        
+        ¡Llevá 2 números por **$5.000**!
+        
+        ---
+        
+        **📞 CONTACTO**
+        
+        WhatsApp: 3826448225
+        """)
+
+# ========== MAIN ==========
+def main():
+    # Cargar configuración
+    config = cargar_config()
     
-    🎲 Quiniela Nacional Matutina  
-    ⏰ Cuando se vendan todos los números
+    # Mostrar sidebar siempre
+    mostrar_sidebar(config)
     
-    ---
-    
-    **💎 PROMO ESPECIAL**
-    
-    ¡Llevá 2 números por **$5.000**!
-    
-    ---
-    
-    **📞 CONTACTO**
-    
-    WhatsApp: 3826448225
-    """)
+    # Verificar si está logueado
+    if st.session_state.logged_in:
+        # Cargar premios para admin
+        premios = cargar_premios()
+        mostrar_admin_panel(config, premios)
+    else:
+        # Mostrar la rifa pública
+        premios = cargar_premios()
+        mostrar_rifa_publica(config, premios)
+        
+        # Botón para login (pequeño al final)
+        with st.expander("🔐 Acceso Administrativo"):
+            mostrar_login()
+
+if __name__ == "__main__":
+    main()
