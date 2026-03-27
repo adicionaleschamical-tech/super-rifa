@@ -7,7 +7,7 @@ import json
 
 st.set_page_config(page_title="SUPER RIFA", page_icon="✂️", layout="wide")
 
-# CSS FUERTE para forzar grid en móvil
+# CSS FUERTE para forzar 10 columnas en móvil
 st.markdown("""
 <style>
 .stApp { background: linear-gradient(135deg, #f8f9fa 0%, #f0f2f5 100%); }
@@ -23,78 +23,77 @@ st.markdown("""
 .pago-texto { text-align: center; margin-top: 15px; padding: 15px; background: #1e3a5f; border-radius: 15px; color: white; }
 .alias-destacado { font-size: 1.3em; font-weight: bold; color: #c9a03d; background: rgba(255,255,255,0.1); display: inline-block; padding: 6px 16px; border-radius: 30px; }
 
-/* ESTILO PARA CADA FILA DE NÚMEROS */
-.fila-numeros {
-    display: flex;
-    flex-direction: row;
-    flex-wrap: nowrap;
-    justify-content: space-between;
-    gap: 6px;
-    margin-bottom: 8px;
-    width: 100%;
-}
-
-.fila-numeros > div {
-    flex: 1 1 0;
-    min-width: 0;
+/* FORZAR QUE CADA FILA TENGA 10 COLUMNAS IGUALES */
+[data-testid="column"] {
+    min-width: 0 !important;
+    flex: 1 1 0% !important;
 }
 
 /* BOTONES */
 .stButton button {
-    background: #10b981 !important;
-    color: white !important;
-    border: none !important;
+    background: white !important;
+    color: #1e3a5f !important;
+    border: 2px solid #cbd5e1 !important;
     border-radius: 12px !important;
-    padding: 12px 8px !important;
-    font-size: 14px !important;
+    padding: 10px 5px !important;
+    font-size: 13px !important;
     font-weight: bold !important;
     width: 100% !important;
-    white-space: nowrap !important;
+    text-align: center !important;
     cursor: pointer !important;
+    transition: all 0.2s ease !important;
 }
 
 .stButton button:hover {
-    background: #059669 !important;
+    background: #f1f5f9 !important;
     transform: translateY(-2px);
+    border-color: #1e3a5f !important;
 }
 
+/* Botones reservados */
 .stButton button:disabled {
     background: #f59e0b !important;
     color: white !important;
+    border-color: #f59e0b !important;
     cursor: not-allowed !important;
-    opacity: 0.8 !important;
+    opacity: 0.9 !important;
 }
 
 /* Botones vendidos */
 button[disabled] {
     background: #ef4444 !important;
+    color: white !important;
+    border-color: #ef4444 !important;
 }
 
-/* Responsive móvil */
+/* RESPONSIVE MÓVIL - FORZAR 10 COLUMNAS */
 @media (max-width: 768px) {
-    .fila-numeros {
-        gap: 3px;
-        margin-bottom: 4px;
-    }
     .stButton button {
         padding: 8px 2px !important;
-        font-size: 10px !important;
+        font-size: 11px !important;
         white-space: nowrap !important;
     }
     .premio-card { padding: 8px 4px; font-size: 10px; }
     .premio-numero { width: 28px; height: 28px; font-size: 11px; }
     .main-title { font-size: 1.5em; }
-    .info-card h3 { font-size: 1em; }
-    .precio-destacado { font-size: 1.3em; }
 }
 
 @media (max-width: 480px) {
-    .fila-numeros {
-        gap: 2px;
-    }
     .stButton button {
         padding: 6px 1px !important;
-        font-size: 8px !important;
+        font-size: 9px !important;
+    }
+}
+
+/* Forzar que las filas de columnas se mantengan en línea */
+.row-widget.stHorizontal {
+    flex-wrap: nowrap !important;
+    gap: 6px !important;
+}
+
+@media (max-width: 768px) {
+    .row-widget.stHorizontal {
+        gap: 3px !important;
     }
 }
 </style>
@@ -130,17 +129,11 @@ datos = sheet.get_all_values()
 df = pd.DataFrame(datos[1:], columns=datos[0])
 
 st.markdown("### 🎲 ¡ELEGÍ TUS NÚMEROS!")
-st.markdown("🟢 **Disponible** | 🟠 **Reservado** | 🔴 **Vendido**")
+st.markdown("⚪ **Disponible** | 🟠 **Reservado** | 🔴 **Vendido**")
 
-# ========== BOTONES NATIVOS DE STREAMLIT CON CSS GRID ==========
-# Crear un contenedor para cada fila usando div con display flex
+# ========== BOTONES NATIVOS DE STREAMLIT ==========
 for fila in range(10):
-    # Usar HTML para crear una fila con flex
-    st.markdown('<div class="fila-numeros">', unsafe_allow_html=True)
-    
-    # Crear 10 columnas dentro de la fila
     cols = st.columns(10)
-    
     for col_idx in range(10):
         numero_num = fila * 10 + col_idx
         numero = f"{numero_num:02d}"
@@ -152,18 +145,16 @@ for fila in range(10):
         
         with cols[col_idx]:
             if estado == "Disponible":
-                # Botón verde con emoji
-                if st.button(f"🟢 {numero}", key=f"num_{numero}", use_container_width=True):
+                # Botón BLANCO con borde
+                if st.button(f"⚪ {numero}", key=f"num_{numero}", use_container_width=True):
                     st.session_state.numero_seleccionado = numero
                     st.rerun()
             elif estado == "Reservado":
-                # Botón naranja deshabilitado
+                # Botón NARANJA
                 st.button(f"🟠 {numero}", key=f"num_{numero}", disabled=True, use_container_width=True)
             else:
-                # Botón rojo deshabilitado
+                # Botón ROJO
                 st.button(f"🔴 {numero}", key=f"num_{numero}", disabled=True, use_container_width=True)
-    
-    st.markdown('</div>', unsafe_allow_html=True)
 
 # Formulario de reserva
 if 'numero_seleccionado' in st.session_state and st.session_state.numero_seleccionado:
@@ -221,7 +212,7 @@ with st.sidebar:
     st.markdown("""
     **🎯 ¿CÓMO PARTICIPAR?**
     
-    1️⃣ Elegí un número **VERDE**
+    1️⃣ Elegí un número **BLANCO** (⚪)
     2️⃣ Completá tus datos
     3️⃣ Transferí al alias: **Tomas.130611**
     4️⃣ ¡Listo! Ya tenés tu número
@@ -230,7 +221,7 @@ with st.sidebar:
     
     **🎨 ESTADOS**
     
-    🟢 Verde = Disponible  
+    ⚪ Blanco = Disponible  
     🟠 Naranja = Reservado  
     🔴 Rojo = Vendido
     
