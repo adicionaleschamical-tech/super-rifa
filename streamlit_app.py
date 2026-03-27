@@ -4,6 +4,7 @@ from google.oauth2.service_account import Credentials
 import pandas as pd
 import time
 import json
+import streamlit.components.v1 as components
 
 st.set_page_config(page_title="SUPER RIFA", page_icon="✂️", layout="wide")
 
@@ -23,7 +24,7 @@ st.markdown("""
 .pago-texto { text-align: center; margin-top: 15px; padding: 15px; background: #1e3a5f; border-radius: 15px; color: white; }
 .alias-destacado { font-size: 1.3em; font-weight: bold; color: #c9a03d; background: rgba(255,255,255,0.1); display: inline-block; padding: 6px 16px; border-radius: 30px; }
 
-/* GRID DE NÚMEROS - FUNCIONA EN TODOS LOS DISPOSITIVOS */
+/* GRID DE NÚMEROS */
 .numero-grid {
     display: grid;
     grid-template-columns: repeat(10, 1fr);
@@ -126,41 +127,58 @@ estados = {}
 for _, row in df.iterrows():
     estados[str(row['Número']).strip()] = row['Estado']
 
-# ========== USAR st.form CON BOTONES HTML ==========
 # Inicializar número seleccionado
 if 'numero_seleccionado' not in st.session_state:
     st.session_state.numero_seleccionado = None
 
-# Formulario que captura el número seleccionado
-with st.form(key="seleccion_form"):
-    st.markdown("### Seleccioná un número haciendo clic:")
+# ========== GENERAR GRID CON COMPONENTS ==========
+# Crear HTML con botones que envían el número a Streamlit
+html_code = """
+<div class="numero-grid">
+"""
+
+for i in range(100):
+    numero = f"{i:02d}"
+    estado = estados.get(numero, "Disponible")
     
-    # Generar el grid de números con HTML
-    html_grid = '<div class="numero-grid">'
-    for i in range(100):
-        numero = f"{i:02d}"
-        estado = estados.get(numero, "Disponible")
-        
-        if estado == "Disponible":
-            clase = ""
-            html_grid += f'<button type="submit" name="numero" value="{numero}" class="numero-btn">🟢 {numero}</button>'
-        elif estado == "Reservado":
-            html_grid += f'<button class="numero-btn reservado" disabled>🟠 {numero}</button>'
-        else:
-            html_grid += f'<button class="numero-btn vendido" disabled>🔴 {numero}</button>'
-    html_grid += '</div>'
+    if estado == "Disponible":
+        html_code += f'<button class="numero-btn" onclick="seleccionarNumero(\'{numero}\')">🟢 {numero}</button>'
+    elif estado == "Reservado":
+        html_code += f'<button class="numero-btn reservado" disabled>🟠 {numero}</button>'
+    else:
+        html_code += f'<button class="numero-btn vendido" disabled>🔴 {numero}</button>'
+
+html_code += """
+</div>
+
+<script>
+function seleccionarNumero(numero) {
+    // Enviar el número a Streamlit
+    const event = new CustomEvent('streamlit:setComponentValue', {
+        detail: { value: numero }
+    });
+    window.dispatchEvent(event);
     
-    # Mostrar el grid
-    st.markdown(html_grid, unsafe_allow_html=True)
-    
-    # Botón oculto para capturar el valor seleccionado
-    numero_seleccionado_form = st.selectbox("", options=[""] + [f"{i:02d}" for i in range(100)], label_visibility="collapsed", key="numero_select")
-    
-    submitted = st.form_submit_button("Confirmar selección", use_container_width=True)
-    
-    if submitted and numero_seleccionado_form:
-        st.session_state.numero_seleccionado = numero_seleccionado_form
-        st.rerun()
+    // También intentar con postMessage
+    if (window.parent) {
+        window.parent.postMessage({
+            type: 'streamlit:setComponentValue',
+            value: numero
+        }, '*');
+    }
+}
+</script>
+"""
+
+# Mostrar el grid
+components.html(html_code, height=650, scrolling=False)
+
+# Input oculto para capturar el número desde JavaScript
+numero_recibido = st.text_input("", key="hidden_input", label_visibility="collapsed")
+
+if numero_recibido:
+    st.session_state.numero_seleccionado = numero_recibido
+    st.rerun()
 
 # ========== FORMULARIO DE RESERVA ==========
 if st.session_state.numero_seleccionado:
