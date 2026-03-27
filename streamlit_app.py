@@ -97,14 +97,17 @@ def cargar_premios():
             
             # Saltar encabezado
             for idx, fila in enumerate(datos[1:], start=1):
-                if len(fila) >= 4:
+                if len(fila) >= 3:
                     premio = {
                         "icono": fila[0] if len(fila) > 0 else "🎁",
-                        "titulo": fila[1] if len(fila) > 1 else f"Premio {idx}°",
-                        "descripcion": fila[2] if len(fila) > 2 else "Descripción",
+                        "titulo": fila[1] if len(fila) > 1 else "",
+                        "descripcion": fila[2] if len(fila) > 2 else "",
                         "orden": idx,
                         "premio_extra": fila[4] if len(fila) > 4 else ""
                     }
+                    # Si el título está vacío, usar un título por defecto
+                    if not premio["titulo"]:
+                        premio["titulo"] = f"Premio {idx}°"
                     premios.append(premio)
             
             # Si no hay premios, crear los 20 por defecto
@@ -122,7 +125,7 @@ def obtener_premios_default():
     for i in range(1, 21):
         premios.append({
             "icono": "🏆" if i == 1 else ("🥈" if i == 2 else ("🥉" if i == 3 else "🎁")),
-            "titulo": f"Premio {i}° Lugar",
+            "titulo": f"Premio {i}°",
             "descripcion": f"Descripción del {i}° premio",
             "orden": i,
             "premio_extra": ""
@@ -223,7 +226,7 @@ def guardar_premios(premios):
         for premio in premios:
             sheet.append_row([
                 premio.get('icono', '🎁'),
-                premio.get('titulo', 'Premio'),
+                premio.get('titulo', ''),
                 premio.get('descripcion', ''),
                 str(premio.get('orden', 99)),
                 premio.get('premio_extra', '')
@@ -394,20 +397,23 @@ def mostrar_admin_panel(config, premios):
         for idx in range(len(premios_actuales)):
             p = premios_actuales[idx]
             with st.container():
-                st.markdown(f"**{idx+1}° Lugar**")
+                # Mostrar el número del lugar de forma clara
+                st.markdown(f"**🎖️ {idx+1}° LUGAR**")
                 col1, col2, col3, col4, col5 = st.columns([1, 2, 2, 2, 1])
                 with col1:
-                    nuevo_icono = st.text_input("Icono", value=p['icono'], key=f"icono_{idx}")
+                    nuevo_icono = st.text_input("Icono", value=p['icono'], key=f"icono_{idx}", help="Ej: 🏆, 🎁, ✂️, etc.")
                 with col2:
-                    nuevo_titulo = st.text_input("Título", value=p['titulo'], key=f"titulo_{idx}")
+                    nuevo_titulo = st.text_input("Nombre del Premio", value=p['titulo'], key=f"titulo_{idx}", 
+                                                placeholder="Ej: Jarra térmica, Corte de pelo, etc.")
                 with col3:
-                    nueva_desc = st.text_input("Descripción", value=p['descripcion'], key=f"desc_{idx}")
+                    nueva_desc = st.text_input("Descripción", value=p['descripcion'], key=f"desc_{idx}", 
+                                              placeholder="Ej: 2 litros, Incluye bebida, etc.")
                 with col4:
                     nuevo_extra = st.text_input("Premio Extra", value=p.get('premio_extra', ''), key=f"extra_{idx}", 
                                                placeholder="Ej: + $5000 adicional")
                 with col5:
                     if idx >= 5:  # Permitir eliminar solo premios después del 5°
-                        if st.button("🗑️", key=f"del_{idx}"):
+                        if st.button("🗑️ Eliminar", key=f"del_{idx}"):
                             st.session_state.premios_temp.pop(idx)
                             st.rerun()
                 
@@ -418,20 +424,24 @@ def mostrar_admin_panel(config, premios):
                     "orden": idx + 1,
                     "premio_extra": nuevo_extra
                 }
+                st.markdown("---")
         
         # Botón para agregar nuevo premio
         if len(premios_actuales) < 20:
-            if st.button("➕ Agregar nuevo premio", use_container_width=True):
-                st.session_state.premios_temp.append({
-                    "icono": "🎁",
-                    "titulo": f"Premio {len(premios_actuales)+1}° Lugar",
-                    "descripcion": "Descripción del premio",
-                    "orden": len(premios_actuales) + 1,
-                    "premio_extra": ""
-                })
-                st.rerun()
+            col_add1, col_add2, col_add3 = st.columns([1, 2, 1])
+            with col_add2:
+                if st.button("➕ Agregar nuevo premio", use_container_width=True):
+                    st.session_state.premios_temp.append({
+                        "icono": "🎁",
+                        "titulo": "",
+                        "descripcion": "",
+                        "orden": len(premios_actuales) + 1,
+                        "premio_extra": ""
+                    })
+                    st.rerun()
         
         # Botón para guardar todos los premios
+        st.markdown("---")
         col_save1, col_save2, col_save3 = st.columns([1, 2, 1])
         with col_save2:
             if st.button("💾 GUARDAR TODOS LOS PREMIOS", use_container_width=True, type="primary"):
@@ -562,16 +572,19 @@ def mostrar_rifa_publica(config, premios):
         for i in range(min(5, len(premios))):
             premio = premios[i]
             with cols[i]:
+                # Mostrar solo el título del premio, no incluir "Lugar"
+                titulo_mostrar = premio["titulo"] if premio["titulo"] else f"Premio {i+1}°"
                 premio_extra_html = f'<div class="premio-extra">{premio.get("premio_extra", "")}</div>' if premio.get("premio_extra") else ""
-                st.markdown(f'<div class="premio-card"><div class="premio-numero">{i+1}°</div><b>{premio["titulo"]}</b><br><small>{premio["descripcion"]}</small>{premio_extra_html}</div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="premio-card"><div class="premio-numero">{i+1}°</div><b>{titulo_mostrar}</b><br><small>{premio["descripcion"]}</small>{premio_extra_html}</div>', unsafe_allow_html=True)
         
         # Mostrar premios adicionales en expander
         if len(premios) > 5:
             with st.expander("🎁 Ver todos los premios (1° al 20°)"):
                 for i in range(5, len(premios)):
                     premio = premios[i]
+                    titulo_mostrar = premio["titulo"] if premio["titulo"] else f"Premio {i+1}°"
                     premio_extra_html = f' <span class="premio-extra">{premio.get("premio_extra", "")}</span>' if premio.get("premio_extra") else ""
-                    st.markdown(f"**{i+1}° Lugar:** {premio['icono']} **{premio['titulo']}** - {premio['descripcion']}{premio_extra_html}")
+                    st.markdown(f"**{i+1}° Lugar:** {premio['icono']} **{titulo_mostrar}** - {premio['descripcion']}{premio_extra_html}")
     
     # Configuración de números
     cantidad_numeros = int(config.get("cantidad_numeros", 100))
