@@ -4,11 +4,10 @@ from google.oauth2.service_account import Credentials
 import pandas as pd
 import time
 import json
-import streamlit.components.v1 as components
 
 st.set_page_config(page_title="SUPER RIFA", page_icon="✂️", layout="wide")
 
-# CSS principal
+# CSS para grid de números
 st.markdown("""
 <style>
 .stApp { background: linear-gradient(135deg, #f8f9fa 0%, #f0f2f5 100%); }
@@ -24,59 +23,61 @@ st.markdown("""
 .pago-texto { text-align: center; margin-top: 15px; padding: 15px; background: #1e3a5f; border-radius: 15px; color: white; }
 .alias-destacado { font-size: 1.3em; font-weight: bold; color: #c9a03d; background: rgba(255,255,255,0.1); display: inline-block; padding: 6px 16px; border-radius: 30px; }
 
-/* ESTILOS PARA EL GRID DE NÚMEROS */
-.numero-grid {
+/* GRID DE NÚMEROS */
+.numeros-container {
     display: grid;
     grid-template-columns: repeat(10, 1fr);
     gap: 8px;
     margin: 20px 0;
-    width: 100%;
 }
 
-.numero-btn {
+.numero-boton {
     background: white;
-    border: 1px solid #e2e8f0;
+    border: 2px solid #e2e8f0;
     border-radius: 12px;
-    padding: 10px 5px;
+    padding: 12px 5px;
     font-size: 14px;
     font-weight: bold;
     text-align: center;
     cursor: pointer;
     transition: all 0.2s;
     width: 100%;
+    font-family: monospace;
 }
 
-.numero-btn:hover {
-    background: #1e3a5f;
-    color: white;
+.numero-boton:hover {
     transform: translateY(-2px);
+    box-shadow: 0 4px 10px rgba(0,0,0,0.1);
 }
 
-.numero-btn.disponible {
-    background: white;
-    color: #1e3a5f;
+.numero-boton.disponible {
+    background: #10b981;
+    color: white;
+    border-color: #10b981;
 }
 
-.numero-btn.reservado {
+.numero-boton.reservado {
     background: #f59e0b;
     color: white;
+    border-color: #f59e0b;
     cursor: not-allowed;
-    opacity: 0.7;
+    opacity: 0.8;
 }
 
-.numero-btn.vendido {
-    background: #dc2626;
+.numero-boton.vendido {
+    background: #ef4444;
     color: white;
+    border-color: #ef4444;
     cursor: not-allowed;
-    opacity: 0.7;
+    opacity: 0.8;
 }
 
 @media (max-width: 768px) {
-    .numero-grid {
+    .numeros-container {
         gap: 4px;
     }
-    .numero-btn {
-        padding: 6px 2px;
+    .numero-boton {
+        padding: 8px 2px;
         font-size: 11px;
     }
     .premio-card { padding: 8px 4px; font-size: 10px; }
@@ -84,11 +85,11 @@ st.markdown("""
 }
 
 @media (max-width: 480px) {
-    .numero-btn {
-        padding: 5px 1px;
+    .numero-boton {
+        padding: 6px 1px;
         font-size: 9px;
     }
-    .numero-grid {
+    .numeros-container {
         gap: 3px;
     }
 }
@@ -127,14 +128,45 @@ df = pd.DataFrame(datos[1:], columns=datos[0])
 st.markdown("### 🎲 ¡ELEGÍ TUS NÚMEROS!")
 st.markdown("🟢 **Disponible** | 🟠 **Reservado** | 🔴 **Vendido**")
 
-# ========== GENERAR GRID CON HTML PURO ==========
+# ========== GENERAR GRID CON BOTONES FUNCIONALES ==========
 # Crear un diccionario de estados
 estados = {}
 for _, row in df.iterrows():
     estados[str(row['Número']).strip()] = row['Estado']
 
-# Generar HTML del grid
-html_grid = '<div class="numero-grid">'
+# Inicializar número seleccionado
+if 'numero_seleccionado' not in st.session_state:
+    st.session_state.numero_seleccionado = None
+
+# Usar st.markdown con HTML y botones que usan JavaScript para comunicarse
+import streamlit.components.v1 as components
+
+# Generar HTML con botones interactivos
+html_botones = """
+<script>
+function seleccionarNumero(numero) {
+    // Crear un evento personalizado para Streamlit
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.value = numero;
+    input.id = 'selected_number';
+    input.style.display = 'none';
+    document.body.appendChild(input);
+    
+    // Disparar evento de cambio
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    
+    // También intentar con el método de Streamlit
+    if (window.parent && window.parent.postMessage) {
+        window.parent.postMessage({
+            type: 'streamlit:setComponentValue',
+            value: numero
+        }, '*');
+    }
+}
+</script>
+<div class="numeros-container">
+"""
 
 for i in range(100):
     numero = f"{i:02d}"
@@ -142,54 +174,55 @@ for i in range(100):
     
     if estado == "Disponible":
         clase = "disponible"
-        onclick = f"onclick=\"parent.postMessage({{type: 'streamlit:setComponentValue', value: '{numero}'}}, '*')\""
+        emoji = "🟢"
+        onclick = f"onclick=\"seleccionarNumero('{numero}')\""
     elif estado == "Reservado":
         clase = "reservado"
+        emoji = "🟠"
         onclick = "disabled"
     else:
         clase = "vendido"
+        emoji = "🔴"
         onclick = "disabled"
     
-    if clase == "disponible":
-        html_grid += f'<button class="numero-btn {clase}" {onclick}>🟢 {numero}</button>'
-    elif clase == "reservado":
-        html_grid += f'<button class="numero-btn {clase}" disabled>🟠 {numero}</button>'
+    if onclick != "disabled":
+        html_botones += f'<button class="numero-boton {clase}" {onclick}>{emoji} {numero}</button>'
     else:
-        html_grid += f'<button class="numero-btn {clase}" disabled>🔴 {numero}</button>'
+        html_botones += f'<button class="numero-boton {clase}" disabled>{emoji} {numero}</button>'
 
-html_grid += '</div>'
+html_botones += '</div>'
 
-# JavaScript para capturar clics
-html_grid += """
+# Agregar input oculto para capturar la selección
+html_botones += """
+<input type="text" id="numero_seleccionado" style="display:none">
 <script>
-window.addEventListener('message', function(event) {
-    if (event.data.type === 'streamlit:setComponentValue') {
-        // Enviar el valor a Streamlit
-        const input = document.createElement('input');
-        input.type = 'text';
-        input.value = event.data.value;
-        input.style.display = 'none';
-        document.body.appendChild(input);
-        input.dispatchEvent(new Event('input', {bubbles: true}));
-    }
-});
+// Escuchar cambios en el input oculto
+const hiddenInput = document.getElementById('numero_seleccionado');
+if (hiddenInput) {
+    hiddenInput.addEventListener('input', function(e) {
+        // Enviar a Streamlit
+        const streamlitInput = document.createElement('input');
+        streamlitInput.type = 'text';
+        streamlitInput.value = e.target.value;
+        streamlitInput.style.display = 'none';
+        document.body.appendChild(streamlitInput);
+        streamlitInput.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+}
 </script>
 """
 
 # Mostrar el grid
-components.html(html_grid, height=650, scrolling=False)
+components.html(html_botones, height=650, scrolling=False)
 
-# Capturar número seleccionado (usando un input oculto con session state)
-if 'numero_seleccionado' not in st.session_state:
-    st.session_state.numero_seleccionado = None
+# Input oculto para recibir el número desde JavaScript
+numero_desde_js = st.text_input("", key="numero_js", label_visibility="collapsed", placeholder="")
 
-# Input oculto para recibir el número desde el componente
-numero_recibido = st.text_input("", key="hidden_input", label_visibility="collapsed", placeholder="")
-if numero_recibido:
-    st.session_state.numero_seleccionado = numero_recibido
+if numero_desde_js:
+    st.session_state.numero_seleccionado = numero_desde_js
     st.rerun()
 
-# Formulario de reserva
+# ========== FORMULARIO DE RESERVA ==========
 if st.session_state.numero_seleccionado:
     numero_sel = st.session_state.numero_seleccionado
     
