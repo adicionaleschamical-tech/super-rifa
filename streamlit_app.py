@@ -36,7 +36,7 @@ client = conectar_google_sheets()
 
 # ========== FUNCIÓN DE LOGIN ==========
 def verificar_usuario(username, password):
-    """Verificar usuario en Google Sheets"""
+    """Verificar usuario en Google Sheets (contraseña en texto plano)"""
     if not client:
         return False, None
     
@@ -46,9 +46,9 @@ def verificar_usuario(username, password):
         
         for fila in datos[1:]:
             if len(fila) >= 4 and fila[0] == username and fila[3] == "SI":
-                hash_ingresado = hashlib.sha256(password.encode()).hexdigest()
-                if hash_ingresado == fila[1]:
-                    return True, fila[2]
+                # Comparar contraseña en texto plano (sin hash)
+                if password == fila[1]:  # fila[1] es la contraseña en texto plano
+                    return True, fila[2]  # fila[2] es el rol
         return False, None
     except Exception as e:
         return False, None
