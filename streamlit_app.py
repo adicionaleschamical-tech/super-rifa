@@ -7,7 +7,7 @@ import json
 
 st.set_page_config(page_title="SUPER RIFA", page_icon="✂️", layout="wide")
 
-# CSS para grid de números
+# CSS FUERTE para forzar grid en móvil
 st.markdown("""
 <style>
 .stApp { background: linear-gradient(135deg, #f8f9fa 0%, #f0f2f5 100%); }
@@ -23,74 +23,78 @@ st.markdown("""
 .pago-texto { text-align: center; margin-top: 15px; padding: 15px; background: #1e3a5f; border-radius: 15px; color: white; }
 .alias-destacado { font-size: 1.3em; font-weight: bold; color: #c9a03d; background: rgba(255,255,255,0.1); display: inline-block; padding: 6px 16px; border-radius: 30px; }
 
-/* GRID DE NÚMEROS */
-.numeros-container {
-    display: grid;
-    grid-template-columns: repeat(10, 1fr);
-    gap: 8px;
-    margin: 20px 0;
-}
-
-.numero-boton {
-    background: white;
-    border: 2px solid #e2e8f0;
-    border-radius: 12px;
-    padding: 12px 5px;
-    font-size: 14px;
-    font-weight: bold;
-    text-align: center;
-    cursor: pointer;
-    transition: all 0.2s;
+/* ESTILO PARA CADA FILA DE NÚMEROS */
+.fila-numeros {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    justify-content: space-between;
+    gap: 6px;
+    margin-bottom: 8px;
     width: 100%;
-    font-family: monospace;
 }
 
-.numero-boton:hover {
+.fila-numeros > div {
+    flex: 1 1 0;
+    min-width: 0;
+}
+
+/* BOTONES */
+.stButton button {
+    background: #10b981 !important;
+    color: white !important;
+    border: none !important;
+    border-radius: 12px !important;
+    padding: 12px 8px !important;
+    font-size: 14px !important;
+    font-weight: bold !important;
+    width: 100% !important;
+    white-space: nowrap !important;
+    cursor: pointer !important;
+}
+
+.stButton button:hover {
+    background: #059669 !important;
     transform: translateY(-2px);
-    box-shadow: 0 4px 10px rgba(0,0,0,0.1);
 }
 
-.numero-boton.disponible {
-    background: #10b981;
-    color: white;
-    border-color: #10b981;
+.stButton button:disabled {
+    background: #f59e0b !important;
+    color: white !important;
+    cursor: not-allowed !important;
+    opacity: 0.8 !important;
 }
 
-.numero-boton.reservado {
-    background: #f59e0b;
-    color: white;
-    border-color: #f59e0b;
-    cursor: not-allowed;
-    opacity: 0.8;
+/* Botones vendidos */
+button[disabled] {
+    background: #ef4444 !important;
 }
 
-.numero-boton.vendido {
-    background: #ef4444;
-    color: white;
-    border-color: #ef4444;
-    cursor: not-allowed;
-    opacity: 0.8;
-}
-
+/* Responsive móvil */
 @media (max-width: 768px) {
-    .numeros-container {
-        gap: 4px;
+    .fila-numeros {
+        gap: 3px;
+        margin-bottom: 4px;
     }
-    .numero-boton {
-        padding: 8px 2px;
-        font-size: 11px;
+    .stButton button {
+        padding: 8px 2px !important;
+        font-size: 10px !important;
+        white-space: nowrap !important;
     }
     .premio-card { padding: 8px 4px; font-size: 10px; }
     .premio-numero { width: 28px; height: 28px; font-size: 11px; }
+    .main-title { font-size: 1.5em; }
+    .info-card h3 { font-size: 1em; }
+    .precio-destacado { font-size: 1.3em; }
 }
 
 @media (max-width: 480px) {
-    .numero-boton {
-        padding: 6px 1px;
-        font-size: 9px;
+    .fila-numeros {
+        gap: 2px;
     }
-    .numeros-container {
-        gap: 3px;
+    .stButton button {
+        padding: 6px 1px !important;
+        font-size: 8px !important;
     }
 }
 </style>
@@ -128,102 +132,41 @@ df = pd.DataFrame(datos[1:], columns=datos[0])
 st.markdown("### 🎲 ¡ELEGÍ TUS NÚMEROS!")
 st.markdown("🟢 **Disponible** | 🟠 **Reservado** | 🔴 **Vendido**")
 
-# ========== GENERAR GRID CON BOTONES FUNCIONALES ==========
-# Crear un diccionario de estados
-estados = {}
-for _, row in df.iterrows():
-    estados[str(row['Número']).strip()] = row['Estado']
-
-# Inicializar número seleccionado
-if 'numero_seleccionado' not in st.session_state:
-    st.session_state.numero_seleccionado = None
-
-# Usar st.markdown con HTML y botones que usan JavaScript para comunicarse
-import streamlit.components.v1 as components
-
-# Generar HTML con botones interactivos
-html_botones = """
-<script>
-function seleccionarNumero(numero) {
-    // Crear un evento personalizado para Streamlit
-    const input = document.createElement('input');
-    input.type = 'text';
-    input.value = numero;
-    input.id = 'selected_number';
-    input.style.display = 'none';
-    document.body.appendChild(input);
+# ========== BOTONES NATIVOS DE STREAMLIT CON CSS GRID ==========
+# Crear un contenedor para cada fila usando div con display flex
+for fila in range(10):
+    # Usar HTML para crear una fila con flex
+    st.markdown('<div class="fila-numeros">', unsafe_allow_html=True)
     
-    // Disparar evento de cambio
-    input.dispatchEvent(new Event('input', { bubbles: true }));
+    # Crear 10 columnas dentro de la fila
+    cols = st.columns(10)
     
-    // También intentar con el método de Streamlit
-    if (window.parent && window.parent.postMessage) {
-        window.parent.postMessage({
-            type: 'streamlit:setComponentValue',
-            value: numero
-        }, '*');
-    }
-}
-</script>
-<div class="numeros-container">
-"""
-
-for i in range(100):
-    numero = f"{i:02d}"
-    estado = estados.get(numero, "Disponible")
+    for col_idx in range(10):
+        numero_num = fila * 10 + col_idx
+        numero = f"{numero_num:02d}"
+        
+        # Buscar estado del número
+        estado = "Disponible"
+        if len(df[df['Número'] == numero]) > 0:
+            estado = df[df['Número'] == numero]['Estado'].values[0]
+        
+        with cols[col_idx]:
+            if estado == "Disponible":
+                # Botón verde con emoji
+                if st.button(f"🟢 {numero}", key=f"num_{numero}", use_container_width=True):
+                    st.session_state.numero_seleccionado = numero
+                    st.rerun()
+            elif estado == "Reservado":
+                # Botón naranja deshabilitado
+                st.button(f"🟠 {numero}", key=f"num_{numero}", disabled=True, use_container_width=True)
+            else:
+                # Botón rojo deshabilitado
+                st.button(f"🔴 {numero}", key=f"num_{numero}", disabled=True, use_container_width=True)
     
-    if estado == "Disponible":
-        clase = "disponible"
-        emoji = "🟢"
-        onclick = f"onclick=\"seleccionarNumero('{numero}')\""
-    elif estado == "Reservado":
-        clase = "reservado"
-        emoji = "🟠"
-        onclick = "disabled"
-    else:
-        clase = "vendido"
-        emoji = "🔴"
-        onclick = "disabled"
-    
-    if onclick != "disabled":
-        html_botones += f'<button class="numero-boton {clase}" {onclick}>{emoji} {numero}</button>'
-    else:
-        html_botones += f'<button class="numero-boton {clase}" disabled>{emoji} {numero}</button>'
+    st.markdown('</div>', unsafe_allow_html=True)
 
-html_botones += '</div>'
-
-# Agregar input oculto para capturar la selección
-html_botones += """
-<input type="text" id="numero_seleccionado" style="display:none">
-<script>
-// Escuchar cambios en el input oculto
-const hiddenInput = document.getElementById('numero_seleccionado');
-if (hiddenInput) {
-    hiddenInput.addEventListener('input', function(e) {
-        // Enviar a Streamlit
-        const streamlitInput = document.createElement('input');
-        streamlitInput.type = 'text';
-        streamlitInput.value = e.target.value;
-        streamlitInput.style.display = 'none';
-        document.body.appendChild(streamlitInput);
-        streamlitInput.dispatchEvent(new Event('input', { bubbles: true }));
-    });
-}
-</script>
-"""
-
-# Mostrar el grid
-components.html(html_botones, height=650, scrolling=False)
-
-# Input oculto para recibir el número desde JavaScript
-numero_desde_js = st.text_input("", key="numero_js", label_visibility="collapsed", placeholder="")
-
-if numero_desde_js:
-    st.session_state.numero_seleccionado = numero_desde_js
-    st.rerun()
-
-# ========== FORMULARIO DE RESERVA ==========
-if st.session_state.numero_seleccionado:
+# Formulario de reserva
+if 'numero_seleccionado' in st.session_state and st.session_state.numero_seleccionado:
     numero_sel = st.session_state.numero_seleccionado
     
     # Verificar que siga disponible
