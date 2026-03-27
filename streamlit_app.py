@@ -33,9 +33,9 @@ def conectar_google_sheets():
 
 client = conectar_google_sheets()
 
-# ========== FUNCIÓN DE LOGIN (CONTRASEÑA EN TEXTO PLANO) ==========
+# ========== FUNCIÓN DE LOGIN ==========
 def verificar_usuario(username, password):
-    """Verificar usuario en Google Sheets (contraseña en texto plano)"""
+    """Verificar usuario en Google Sheets"""
     if not client:
         return False, None
     
@@ -80,7 +80,11 @@ def obtener_config_default():
         "telefono": "3826448225",
         "sorteo_texto": "Quiniela Nacional Matutina",
         "fecha_sorteo": "Pendiente",
-        "footer_texto": "¡Gracias por participar!"
+        "footer_texto": "¡Gracias por participar!",
+        "cantidad_numeros": "100",
+        "inicio_numeracion": "0",
+        "mostrar_imagen_rifa": "SI",
+        "mostrar_orientacion": "SI"
     }
 
 def cargar_premios():
@@ -91,12 +95,13 @@ def cargar_premios():
             datos = sheet.get_all_values()
             premios = []
             for fila in datos[1:]:
-                if len(fila) >= 4:
+                if len(fila) >= 5:
                     premios.append({
                         "icono": fila[0],
                         "titulo": fila[1],
                         "descripcion": fila[2],
-                        "orden": int(fila[3]) if fila[3] and fila[3].isdigit() else 99
+                        "orden": int(fila[3]) if fila[3] and fila[3].isdigit() else 99,
+                        "premio_extra": fila[4] if len(fila) > 4 else ""
                     })
             return sorted(premios, key=lambda x: x['orden'])
         except:
@@ -104,24 +109,57 @@ def cargar_premios():
     return obtener_premios_default()
 
 def obtener_premios_default():
-    return [
-        {"icono": "🏆", "titulo": "Jarra térmica", "descripcion": "2 litros", "orden": 1},
-        {"icono": "👙", "titulo": "Ropa interior", "descripcion": "Conjunto femenino", "orden": 2},
-        {"icono": "🎁", "titulo": "Tienda Gabriela", "descripcion": "Premio sorpresa", "orden": 3},
-        {"icono": "✂️", "titulo": "Barbería Caniche", "descripcion": "Corte de pelo", "orden": 4},
-        {"icono": "🍰", "titulo": "Pastafrola", "descripcion": "Casera", "orden": 5}
-    ]
+    premios = []
+    for i in range(1, 21):
+        premios.append({
+            "icono": "🏆" if i == 1 else ("🥈" if i <= 3 else "🎁"),
+            "titulo": f"Premio {i}° Lugar",
+            "descripcion": "Descripción del premio",
+            "orden": i,
+            "premio_extra": ""
+        })
+    return premios
 
-def cargar_numeros():
-    """Cargar números desde Google Sheets"""
+def cargar_numeros(cantidad_numeros=100, inicio=0):
+    """Cargar números desde Google Sheets o crearlos si no existen"""
     if client:
         try:
             sheet = client.open("Rifa").worksheet("Numeros")
             datos = sheet.get_all_values()
+            
             if len(datos) > 1:
-                return pd.DataFrame(datos[1:], columns=datos[0])
-        except:
-            pass
+                df = pd.DataFrame(datos[1:], columns=datos[0])
+                
+                # Verificar si todos los números están presentes
+                numeros_esperados = [f"{i:02d}" for i in range(inicio, inicio + cantidad_numeros)]
+                numeros_existentes = df['Número'].tolist()
+                
+                # Si faltan números, agregarlos
+                for num in numeros_esperados:
+                    if num not in numeros_existentes:
+                        sheet.append_row([num, "Disponible", "", "", ""])
+                
+                # Recargar después de agregar
+                datos = sheet.get_all_values()
+                df = pd.DataFrame(datos[1:], columns=datos[0])
+                return df
+            else:
+                # Crear tabla desde cero
+                sheet.clear()
+                sheet.append_row(["Número", "Estado", "Nombre", "DNI", "Teléfono"])
+                for i in range(inicio, inicio + cantidad_numeros):
+                    numero = f"{i:02d}"
+                    sheet.append_row([numero, "Disponible", "", "", ""])
+                return pd.DataFrame({
+                    "Número": [f"{i:02d}" for i in range(inicio, inicio + cantidad_numeros)],
+                    "Estado": ["Disponible"] * cantidad_numeros,
+                    "Nombre": [""] * cantidad_numeros,
+                    "DNI": [""] * cantidad_numeros,
+                    "Teléfono": [""] * cantidad_numeros
+                })
+        except Exception as e:
+            st.error(f"Error cargando números: {e}")
+            return pd.DataFrame(columns=["Número", "Estado", "Nombre", "DNI", "Teléfono"])
     return pd.DataFrame(columns=["Número", "Estado", "Nombre", "DNI", "Teléfono"])
 
 def actualizar_estado(numero, estado, nombre="", dni="", telefono=""):
@@ -141,7 +179,7 @@ def actualizar_estado(numero, estado, nombre="", dni="", telefono=""):
     return False
 
 def guardar_config(config):
-    """Guardar configuración (admin y editor pueden)"""
+    """Guardar configuración"""
     if not client:
         return False
     
@@ -166,7 +204,7 @@ def guardar_config(config):
         return False
 
 def guardar_premios(premios):
-    """Guardar premios (admin y editor pueden)"""
+    """Guardar premios"""
     if not client:
         return False
     try:
@@ -181,6 +219,23 @@ def guardar_premios(premios):
             sheet.update_cell(i, 2, p['titulo'])
             sheet.update_cell(i, 3, p['descripcion'])
             sheet.update_cell(i, 4, p['orden'])
+            sheet.update_cell(i, 5, p.get('premio_extra', ''))
+        return True
+    except:
+        return False
+
+def regenerar_numeros(cantidad, inicio):
+    """Regenerar todos los números en la hoja"""
+    if not client:
+        return False
+    try:
+        sheet = client.open("Rifa").worksheet("Numeros")
+        sheet.clear()
+        sheet.append_row(["Número", "Estado", "Nombre", "DNI", "Teléfono"])
+        
+        for i in range(inicio, inicio + cantidad):
+            numero = f"{i:02d}"
+            sheet.append_row([numero, "Disponible", "", "", ""])
         return True
     except:
         return False
@@ -223,19 +278,39 @@ def mostrar_admin_panel(config, premios):
     
     st.markdown("---")
     
-    # ========== CONFIGURACIÓN (Admin y Editor pueden) ==========
+    # ========== CONFIGURACIÓN GENERAL ==========
     st.markdown("### ⚙️ Configuración General")
     with st.form("config_form"):
-        nuevo_titulo = st.text_input("Título", value=config.get("titulo", "SUPER RIFA"))
-        nuevo_subtitulo = st.text_input("Subtítulo", value=config.get("subtitulo", "PARA EQUIPAR MI BARBERÍA"))
-        nuevo_color_principal = st.color_picker("Color principal", value=config.get("color_principal", "#1e3a5f"))
-        nuevo_color_secundario = st.color_picker("Color secundario", value=config.get("color_secundario", "#c9a03d"))
-        nuevo_precio = st.number_input("Precio por número ($)", value=int(config.get("precio_unidad", 3000)))
-        nuevo_precio_promo = st.number_input("Precio promoción 2x ($)", value=int(config.get("precio_promo", 5000)))
-        nuevo_alias = st.text_input("Alias de transferencia", value=config.get("alias", "Tomas.130611"))
-        nuevo_telefono = st.text_input("WhatsApp", value=config.get("telefono", "3826448225"))
+        col1, col2 = st.columns(2)
+        with col1:
+            nuevo_titulo = st.text_input("Título", value=config.get("titulo", "SUPER RIFA"))
+            nuevo_subtitulo = st.text_input("Subtítulo", value=config.get("subtitulo", "PARA EQUIPAR MI BARBERÍA"))
+            nuevo_color_principal = st.color_picker("Color principal", value=config.get("color_principal", "#1e3a5f"))
+            nuevo_color_secundario = st.color_picker("Color secundario", value=config.get("color_secundario", "#c9a03d"))
+            
+        with col2:
+            nuevo_precio = st.number_input("Precio por número ($)", value=int(config.get("precio_unidad", 3000)))
+            nuevo_precio_promo = st.number_input("Precio promoción 2x ($)", value=int(config.get("precio_promo", 5000)))
+            nuevo_alias = st.text_input("Alias de transferencia", value=config.get("alias", "Tomas.130611"))
+            nuevo_telefono = st.text_input("WhatsApp", value=config.get("telefono", "3826448225"))
+        
         nuevo_sorteo = st.text_input("Texto del sorteo", value=config.get("sorteo_texto", "Quiniela Nacional Matutina"))
         nueva_fecha = st.text_input("📅 Fecha del sorteo", value=config.get("fecha_sorteo", "Pendiente"))
+        
+        st.markdown("---")
+        st.markdown("### 🔢 Personalización Avanzada")
+        
+        col3, col4 = st.columns(2)
+        with col3:
+            mostrar_imagen = st.selectbox("Mostrar imagen de la rifa", 
+                                         options=["SI", "NO"],
+                                         index=0 if config.get("mostrar_imagen_rifa", "SI") == "SI" else 1)
+            mostrar_orientacion = st.selectbox("Mostrar orientación horizontal", 
+                                              options=["SI", "NO"],
+                                              index=0 if config.get("mostrar_orientacion", "SI") == "SI" else 1)
+        
+        with col4:
+            nuevo_footer = st.text_input("Texto de pie de página", value=config.get("footer_texto", "¡Gracias por participar!"))
         
         if st.form_submit_button("💾 Guardar Configuración", use_container_width=True):
             nueva_config = {
@@ -250,7 +325,11 @@ def mostrar_admin_panel(config, premios):
                 "telefono": nuevo_telefono,
                 "sorteo_texto": nuevo_sorteo,
                 "fecha_sorteo": nueva_fecha,
-                "footer_texto": config.get("footer_texto", "¡Gracias por participar!")
+                "footer_texto": nuevo_footer,
+                "mostrar_imagen_rifa": mostrar_imagen,
+                "mostrar_orientacion": mostrar_orientacion,
+                "cantidad_numeros": config.get("cantidad_numeros", "100"),
+                "inicio_numeracion": config.get("inicio_numeracion", "0")
             }
             if guardar_config(nueva_config):
                 st.success("✅ Configuración guardada")
@@ -261,23 +340,81 @@ def mostrar_admin_panel(config, premios):
     
     st.markdown("---")
     
-    # ========== PREMIOS (Admin y Editor pueden) ==========
-    st.markdown("### 🎁 Editar Premios")
-    premios_editables = []
-    for i, p in enumerate(premios):
-        with st.container():
-            col1, col2, col3, col4 = st.columns([1, 3, 3, 1])
-            with col1:
-                icono = st.text_input(f"Icono {i+1}", value=p['icono'], key=f"icono_{i}")
-            with col2:
-                titulo = st.text_input(f"Título {i+1}", value=p['titulo'], key=f"titulo_{i}")
-            with col3:
-                desc = st.text_input(f"Descripción {i+1}", value=p['descripcion'], key=f"desc_{i}")
-            with col4:
-                orden = st.number_input(f"Orden {i+1}", value=p['orden'], key=f"orden_{i}", min_value=1, max_value=10)
-            premios_editables.append({"icono": icono, "titulo": titulo, "descripcion": desc, "orden": orden})
+    # ========== CONFIGURACIÓN DE NÚMEROS ==========
+    st.markdown("### 🔢 Configuración de Números")
+    st.warning("⚠️ **ATENCIÓN:** Cambiar la cantidad de números reiniciará completamente la rifa. Todos los números volverán a estar disponibles.")
     
-    if st.button("💾 Guardar Premios", use_container_width=True):
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        cantidad_numeros = st.number_input("Cantidad de números", 
+                                           min_value=10, 
+                                           max_value=500, 
+                                           value=int(config.get("cantidad_numeros", 100)),
+                                           step=10)
+    with col2:
+        inicio_numeracion = st.number_input("Inicio de numeración", 
+                                            min_value=0, 
+                                            max_value=999, 
+                                            value=int(config.get("inicio_numeracion", 0)),
+                                            step=1)
+    with col3:
+        st.markdown("### ")
+        if st.button("🔄 REGENERAR NÚMEROS", use_container_width=True, type="primary"):
+            if regenerar_numeros(cantidad_numeros, inicio_numeracion):
+                # Actualizar configuración
+                config_actualizada = config.copy()
+                config_actualizada["cantidad_numeros"] = str(cantidad_numeros)
+                config_actualizada["inicio_numeracion"] = str(inicio_numeracion)
+                guardar_config(config_actualizada)
+                st.success(f"✅ {cantidad_numeros} números generados desde {inicio_numeracion:02d}")
+                time.sleep(1)
+                st.rerun()
+            else:
+                st.error("❌ Error al regenerar números")
+    
+    st.markdown("---")
+    
+    # ========== PREMIOS (Hasta 20°) ==========
+    st.markdown("### 🎁 Editar Premios (1° al 20° Lugar)")
+    st.info("Configurá los premios para cada posición. Los primeros lugares se destacan visualmente.")
+    
+    premios_editables = []
+    
+    # Organizar premios en grupos de 5 para mejor visualización
+    for i in range(0, len(premios), 5):
+        cols = st.columns(5)
+        for j in range(5):
+            idx = i + j
+            if idx < len(premios):
+                p = premios[idx]
+                with cols[j]:
+                    with st.expander(f"**{idx+1}° Lugar**", expanded=False):
+                        icono = st.text_input(f"Icono {idx+1}°", value=p['icono'], key=f"icono_{idx}")
+                        titulo = st.text_input(f"Título {idx+1}°", value=p['titulo'], key=f"titulo_{idx}")
+                        desc = st.text_area(f"Descripción {idx+1}°", value=p['descripcion'], key=f"desc_{idx}", height=60)
+                        premio_extra = st.text_input(f"Premio Extra", value=p.get('premio_extra', ''), key=f"extra_{idx}", 
+                                                     placeholder="Ej: + $5000 adicional")
+                        premios_editables.append({
+                            "icono": icono,
+                            "titulo": titulo,
+                            "descripcion": desc,
+                            "orden": idx + 1,
+                            "premio_extra": premio_extra
+                        })
+    
+    # Botón para agregar más premios si es necesario
+    if len(premios_editables) < 20:
+        if st.button("➕ Agregar nuevo premio", use_container_width=True):
+            premios_editables.append({
+                "icono": "🎁",
+                "titulo": f"Nuevo Premio {len(premios_editables)+1}°",
+                "descripcion": "Descripción del premio",
+                "orden": len(premios_editables) + 1,
+                "premio_extra": ""
+            })
+            st.rerun()
+    
+    if st.button("💾 Guardar Premios", use_container_width=True, type="primary"):
         if guardar_premios(premios_editables):
             st.success("✅ Premios guardados")
             time.sleep(1)
@@ -312,8 +449,10 @@ def generar_css(config):
     .stApp {{ background: linear-gradient(135deg, #f8f9fa 0%, #f0f2f5 100%); }}
     .main-title {{ text-align: center; font-size: 2.2em; font-weight: 800; background: linear-gradient(135deg, {color_principal}, {color_principal}dd); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }}
     .sub-title {{ text-align: center; font-size: 1.2em; color: #4a5568; margin-top: -10px; }}
-    .premio-card {{ background: white; border-radius: 20px; padding: 15px 10px; text-align: center; box-shadow: 0 5px 20px rgba(0,0,0,0.08); margin: 5px; }}
+    .premio-card {{ background: white; border-radius: 20px; padding: 15px 10px; text-align: center; box-shadow: 0 5px 20px rgba(0,0,0,0.08); margin: 5px; transition: transform 0.2s; }}
+    .premio-card:hover {{ transform: translateY(-5px); }}
     .premio-numero {{ background: {color_principal}; color: white; width: 35px; height: 35px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 10px; font-size: 14px; }}
+    .premio-extra {{ background: {color_secundario}20; border-radius: 10px; padding: 3px 8px; font-size: 10px; margin-top: 5px; display: inline-block; }}
     .info-card {{ background: {color_principal}; border-radius: 20px; padding: 20px; color: white; text-align: center; margin: 15px 0; }}
     .precio-destacado {{ font-size: 1.8em; font-weight: bold; color: {color_secundario}; }}
     .promo-oferta {{ background: {color_secundario}; border-radius: 20px; padding: 15px; text-align: center; margin: 15px 0; animation: pulse 1.5s infinite; }}
@@ -333,7 +472,7 @@ def generar_css(config):
 
 # ========== FUNCIÓN PARA GENERAR IMAGEN ==========
 @st.cache_data(ttl=600)
-def generar_imagen_rifa():
+def generar_imagen_rifa(cantidad_numeros=100, inicio=0):
     try:
         sheet = client.open("Rifa").worksheet("Numeros")
         datos = sheet.get_all_values()
@@ -343,10 +482,12 @@ def generar_imagen_rifa():
         for _, row in df_img.iterrows():
             estados[str(row['Número']).strip()] = row['Estado']
         
+        # Calcular dimensiones basadas en la cantidad de números
+        columnas = 10
+        filas = (cantidad_numeros + columnas - 1) // columnas
+        
         ancho_celda = 55
         alto_celda = 55
-        columnas = 10
-        filas = 10
         
         ancho_total = ancho_celda * columnas + 40
         alto_total = alto_celda * filas + 80
@@ -363,23 +504,25 @@ def generar_imagen_rifa():
         
         for fila in range(filas):
             for col in range(columnas):
-                numero = f"{fila * columnas + col:02d}"
-                estado = estados.get(numero, "Disponible")
-                
-                x0 = 20 + col * ancho_celda
-                y0 = 50 + fila * alto_celda
-                x1 = x0 + ancho_celda - 1
-                y1 = y0 + alto_celda - 1
-                
-                if estado == "Disponible":
-                    color = '#10b981'
-                elif estado == "Reservado":
-                    color = '#f59e0b'
-                else:
-                    color = '#ef4444'
-                
-                draw.rectangle([x0, y0, x1, y1], fill=color, outline='white')
-                draw.text((x0 + 18, y0 + 18), numero, fill='white', font=fuente)
+                numero_idx = fila * columnas + col
+                if numero_idx < cantidad_numeros:
+                    numero = f"{inicio + numero_idx:02d}"
+                    estado = estados.get(numero, "Disponible")
+                    
+                    x0 = 20 + col * ancho_celda
+                    y0 = 50 + fila * alto_celda
+                    x1 = x0 + ancho_celda - 1
+                    y1 = y0 + alto_celda - 1
+                    
+                    if estado == "Disponible":
+                        color = '#10b981'
+                    elif estado == "Reservado":
+                        color = '#f59e0b'
+                    else:
+                        color = '#ef4444'
+                    
+                    draw.rectangle([x0, y0, x1, y1], fill=color, outline='white')
+                    draw.text((x0 + 18, y0 + 18), numero, fill='white', font=fuente)
         
         img_bytes = io.BytesIO()
         img.save(img_bytes, format='PNG')
@@ -395,17 +538,33 @@ def mostrar_rifa_publica(config, premios):
     st.markdown(f'<div class="main-title">✂️ {config.get("titulo", "SUPER RIFA")} ✂️</div>', unsafe_allow_html=True)
     st.markdown(f'<div class="sub-title">{config.get("subtitulo", "PARA EQUIPAR MI BARBERÍA")}</div>', unsafe_allow_html=True)
     
+    # Mostrar premios destacados (primeros 5)
     if premios:
-        cols = st.columns(min(len(premios), 5))
+        st.markdown("### 🏆 PREMIOS DESTACADOS")
+        cols = st.columns(min(len(premios[:5]), 5))
         for i, premio in enumerate(premios[:5]):
             with cols[i % 5]:
-                st.markdown(f'<div class="premio-card"><div class="premio-numero">{i+1}°</div><b>{premio["titulo"]}</b><br><small>{premio["descripcion"]}</small></div>', unsafe_allow_html=True)
+                premio_extra_html = f'<div class="premio-extra">{premio.get("premio_extra", "")}</div>' if premio.get("premio_extra") else ""
+                st.markdown(f'<div class="premio-card"><div class="premio-numero">{i+1}°</div><b>{premio["titulo"]}</b><br><small>{premio["descripcion"]}</small>{premio_extra_html}</div>', unsafe_allow_html=True)
+        
+        # Mostrar premios adicionales en expander
+        if len(premios) > 5:
+            with st.expander("🎁 Ver todos los premios (1° al 20°)"):
+                for i in range(5, len(premios)):
+                    premio = premios[i]
+                    premio_extra_html = f' <span class="premio-extra">{premio.get("premio_extra", "")}</span>' if premio.get("premio_extra") else ""
+                    st.markdown(f"**{i+1}° Lugar:** {premio['icono']} **{premio['titulo']}** - {premio['descripcion']}{premio_extra_html}")
+    
+    # Configuración de números
+    cantidad_numeros = int(config.get("cantidad_numeros", 100))
+    inicio_numeracion = int(config.get("inicio_numeracion", 0))
+    fin_numeracion = inicio_numeracion + cantidad_numeros - 1
     
     precio_unidad = int(config.get("precio_unidad", 3000))
     precio_promo = int(config.get("precio_promo", 5000))
     cantidad_promo = int(config.get("cantidad_promo", 2))
     
-    st.markdown(f'<div class="info-card"><h3>🎲 NÚMEROS DEL 00 AL 99</h3><div class="precio-destacado">${precio_unidad:,} CADA NÚMERO</div></div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="info-card"><h3>🎲 NÚMEROS DEL {inicio_numeracion:02d} AL {fin_numeracion:02d}</h3><div class="precio-destacado">${precio_unidad:,} CADA NÚMERO</div><div>Total de números: {cantidad_numeros}</div></div>', unsafe_allow_html=True)
     st.markdown(f'<div class="promo-oferta"><p>🎁 ¡PROMOCIÓN ESPECIAL! 🎁</p><span>{cantidad_promo} NÚMEROS POR ${precio_promo:,}</span></div>', unsafe_allow_html=True)
     
     fecha_sorteo = config.get("fecha_sorteo", "Pendiente")
@@ -414,14 +573,16 @@ def mostrar_rifa_publica(config, premios):
     else:
         st.markdown(f'<div class="fecha-box"><strong>📅 Sorteo:</strong> Se realizará cuando se completen todos los números</div>', unsafe_allow_html=True)
     
-    st.markdown("""
-    <div class="orientacion-box">
-        📱 <strong>¿Usás el celular?</strong><br>
-        🔄 <strong>GIRÁ LA PANTALLA A HORIZONTAL (landscape)</strong> para ver los números en grilla
-    </div>
-    """, unsafe_allow_html=True)
+    # Mostrar orientación si está habilitada
+    if config.get("mostrar_orientacion", "SI") == "SI":
+        st.markdown("""
+        <div class="orientacion-box">
+            📱 <strong>¿Usás el celular?</strong><br>
+            🔄 <strong>GIRÁ LA PANTALLA A HORIZONTAL (landscape)</strong> para ver los números en grilla
+        </div>
+        """, unsafe_allow_html=True)
     
-    df = cargar_numeros()
+    df = cargar_numeros(cantidad_numeros, inicio_numeracion)
     
     st.markdown("### 🎲 ¡ELEGÍ TUS NÚMEROS!")
     st.markdown("🟢 **Verde = Disponible** | 🟠 **Reservado** | 🔴 **Vendido**")
@@ -431,15 +592,19 @@ def mostrar_rifa_publica(config, premios):
         for _, row in df.iterrows():
             estados[str(row['Número']).strip()] = row['Estado']
         
-        for fila in range(20):
-            columnas = st.columns(5)
-            for col_idx in range(5):
-                numero_num = fila * 5 + col_idx
-                if numero_num <= 99:
-                    numero = f"{numero_num:02d}"
+        # Organizar en grilla de 10 columnas para mejor visualización
+        columnas_grilla = 10
+        filas_grilla = (cantidad_numeros + columnas_grilla - 1) // columnas_grilla
+        
+        for fila in range(filas_grilla):
+            cols = st.columns(columnas_grilla)
+            for col in range(columnas_grilla):
+                numero_idx = fila * columnas_grilla + col
+                if numero_idx < cantidad_numeros:
+                    numero = f"{inicio_numeracion + numero_idx:02d}"
                     estado = estados.get(numero, "Disponible")
                     
-                    with columnas[col_idx]:
+                    with cols[col]:
                         if estado == "Disponible":
                             if st.button(f"🟢 {numero}", key=f"btn_{numero}", use_container_width=True):
                                 st.session_state.numero_seleccionado = numero
@@ -452,13 +617,11 @@ def mostrar_rifa_publica(config, premios):
     if 'numero_seleccionado' in st.session_state and st.session_state.numero_seleccionado:
         numero_sel = st.session_state.numero_seleccionado
         
-        df_actual = cargar_numeros()
+        df_actual = cargar_numeros(cantidad_numeros, inicio_numeracion)
         estado_actual = "Disponible"
-        fila_numero = None
         for idx, row in df_actual.iterrows():
             if str(row['Número']).strip() == numero_sel:
                 estado_actual = row['Estado']
-                fila_numero = idx + 2
                 break
         
         if estado_actual != "Disponible":
@@ -495,23 +658,28 @@ def mostrar_rifa_publica(config, premios):
     
     st.markdown(f'<div class="pago-texto">💰 PAGOS POR TRANSFERENCIA AL ALIAS:<br><div class="alias-destacado">{config.get("alias", "Tomas.130611")}</div></div>', unsafe_allow_html=True)
     
-    st.markdown("---")
-    st.markdown("### 📸 Vista previa de la rifa")
-    imagen = generar_imagen_rifa()
-    if imagen:
-        st.image(imagen, use_container_width=True)
-        st.caption("🕐 Imagen actualizada cada 10 minutos")
-        st.download_button(
-            label="📥 Descargar imagen",
-            data=imagen,
-            file_name="rifa_actualizada.png",
-            mime="image/png"
-        )
+    # Mostrar imagen de rifa si está habilitada
+    if config.get("mostrar_imagen_rifa", "SI") == "SI":
+        st.markdown("---")
+        st.markdown("### 📸 Vista previa de la rifa")
+        imagen = generar_imagen_rifa(cantidad_numeros, inicio_numeracion)
+        if imagen:
+            st.image(imagen, use_container_width=True)
+            st.caption("🕐 Imagen actualizada cada 10 minutos")
+            st.download_button(
+                label="📥 Descargar imagen",
+                data=imagen,
+                file_name="rifa_actualizada.png",
+                mime="image/png"
+            )
+    
+    st.markdown(f'<div style="text-align:center; color:#666; margin-top:30px;">{config.get("footer_texto", "¡Gracias por participar!")}</div>', unsafe_allow_html=True)
 
 # ========== SIDEBAR ==========
 def mostrar_sidebar(config):
     precio_unidad = int(config.get("precio_unidad", 3000))
     precio_promo = int(config.get("precio_promo", 5000))
+    cantidad_numeros = int(config.get("cantidad_numeros", 100))
     
     with st.sidebar:
         st.markdown(f"### ✂️ {config.get('titulo', 'SUPER RIFA')}")
@@ -538,6 +706,12 @@ def mostrar_sidebar(config):
         
         • 1 número: ${precio_unidad:,}
         • 2 números: ${precio_promo:,}
+        
+        ---
+        
+        **📊 ESTADÍSTICAS**
+        
+        • Total números: {cantidad_numeros}
         
         ---
         
