@@ -4,10 +4,12 @@ from google.oauth2.service_account import Credentials
 import pandas as pd
 import time
 import json
+from PIL import Image, ImageDraw, ImageFont
+import io
 
 st.set_page_config(page_title="SUPER RIFA", page_icon="✂️", layout="wide")
 
-# CSS
+# ========== CSS ==========
 st.markdown("""
 <style>
 .stApp { background: linear-gradient(135deg, #f8f9fa 0%, #f0f2f5 100%); }
@@ -22,6 +24,7 @@ st.markdown("""
 .sorteo-texto { text-align: center; margin-top: 20px; padding: 12px; background: #1e3a5f; border-radius: 15px; color: white; font-size: 14px; }
 .pago-texto { text-align: center; margin-top: 15px; padding: 15px; background: #1e3a5f; border-radius: 15px; color: white; }
 .alias-destacado { font-size: 1.3em; font-weight: bold; color: #c9a03d; background: rgba(255,255,255,0.1); display: inline-block; padding: 6px 16px; border-radius: 30px; }
+.orientacion-box { background: #fef3c7; border-left: 5px solid #c9a03d; padding: 15px; margin: 20px 0; border-radius: 12px; text-align: center; }
 
 /* Botones */
 .stButton button {
@@ -34,52 +37,35 @@ st.markdown("""
     font-weight: bold !important;
     width: 100% !important;
     cursor: pointer !important;
-    transition: all 0.2s ease !important;
 }
 
 .stButton button:hover {
     background-color: #059669 !important;
-    transform: translateY(-2px);
 }
 
 .stButton button:disabled {
     background-color: #f59e0b !important;
-    color: white !important;
     cursor: not-allowed !important;
-    transform: none !important;
 }
 
 button[kind="secondary"][disabled] {
     background-color: #ef4444 !important;
 }
 
-/* Ajustes para móvil */
 @media (max-width: 768px) {
     .stButton button {
         padding: 10px 3px !important;
         font-size: 13px !important;
     }
-    .premio-card { padding: 10px 4px; font-size: 11px; }
-    .premio-numero { width: 30px; height: 30px; font-size: 12px; }
-    .main-title { font-size: 1.8em; }
-}
-
-/* Mensaje de orientación destacado */
-.orientacion-box {
-    background: #fef3c7;
-    border-left: 5px solid #c9a03d;
-    padding: 15px;
-    margin: 20px 0;
-    border-radius: 12px;
-    text-align: center;
 }
 </style>
 """, unsafe_allow_html=True)
 
+# ========== TÍTULO ==========
 st.markdown('<div class="main-title">✂️ SUPER RIFA! ✂️</div>', unsafe_allow_html=True)
 st.markdown('<div class="sub-title">PARA EQUIPAR MI BARBERÍA</div>', unsafe_allow_html=True)
 
-# Premios
+# ========== PREMIOS ==========
 col1, col2, col3, col4, col5 = st.columns(5)
 premios_texto = ["JARRA TÉRMICA<br>2 litros", "ROPA INTERIOR<br>Conjunto femenino", "TIENDA GABRIELA<br>Premio sorpresa", "BARBERÍA CANICHE<br>Corte de pelo", "PASTAFROLA<br>Una pastafrola"]
 for i, col in enumerate([col1, col2, col3, col4, col5]):
@@ -89,16 +75,15 @@ for i, col in enumerate([col1, col2, col3, col4, col5]):
 st.markdown('<div class="info-card"><h3>🎲 NÚMEROS DEL 00 AL 99</h3><div class="precio-destacado">$3.000 CADA NÚMERO</div></div>', unsafe_allow_html=True)
 st.markdown('<div class="promo-oferta"><p>🎁 ¡PROMOCIÓN ESPECIAL! 🎁</p><span>2 NÚMEROS POR $5.000</span></div>', unsafe_allow_html=True)
 
-# ========== MENSAJE DE ORIENTACIÓN PARA MÓVIL ==========
+# ========== MENSAJE DE ORIENTACIÓN ==========
 st.markdown("""
 <div class="orientacion-box">
     📱 <strong>¿Usás el celular?</strong><br>
-    🔄 <strong>GIRÁ LA PANTALLA A HORIZONTAL (landscape)</strong> para ver los números en grilla<br>
-    💻 También podés usar una tablet o computadora
+    🔄 <strong>GIRÁ LA PANTALLA A HORIZONTAL (landscape)</strong> para ver los números en grilla
 </div>
 """, unsafe_allow_html=True)
 
-# Conectar con Google Sheets
+# ========== CONEXIÓN GOOGLE SHEETS ==========
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
 
 try:
@@ -121,7 +106,7 @@ st.markdown("🟢 **Verde = Disponible** | 🟠 **Reservado** | 🔴 **Vendido**
 if 'numero_seleccionado' not in st.session_state:
     st.session_state.numero_seleccionado = None
 
-# ========== 5 COLUMNAS x 20 FILAS ==========
+# ========== BOTONES INTERACTIVOS (5 COLUMNAS x 20 FILAS) ==========
 for fila in range(20):
     columnas = st.columns(5)
     for col_idx in range(5):
@@ -129,7 +114,6 @@ for fila in range(20):
         if numero_num <= 99:
             numero = f"{numero_num:02d}"
             
-            # Buscar estado
             estado = "Disponible"
             for _, row in df.iterrows():
                 if str(row['Número']).strip() == numero:
@@ -150,7 +134,6 @@ for fila in range(20):
 if st.session_state.numero_seleccionado:
     numero_sel = st.session_state.numero_seleccionado
     
-    # Verificar que siga disponible
     datos_actuales = sheet.get_all_values()
     estado_actual = "Disponible"
     fila_numero = None
@@ -191,7 +174,87 @@ if st.session_state.numero_seleccionado:
                     except Exception as e:
                         st.error(f"❌ Error al reservar: {str(e)}")
 
-# Footer
+# ========== FUNCIÓN PARA GENERAR IMAGEN ==========
+@st.cache_data(ttl=600)
+def generar_imagen_rifa():
+    """Genera imagen PNG con los números actualizados"""
+    try:
+        # Leer datos actualizados
+        datos = sheet.get_all_values()
+        df_img = pd.DataFrame(datos[1:], columns=datos[0])
+        
+        estados = {}
+        for _, row in df_img.iterrows():
+            estados[str(row['Número']).strip()] = row['Estado']
+        
+        # Configuración de la imagen
+        ancho_celda = 55
+        alto_celda = 55
+        columnas = 10
+        filas = 10
+        
+        ancho_total = ancho_celda * columnas + 40
+        alto_total = alto_celda * filas + 80
+        
+        img = Image.new('RGB', (ancho_total, alto_total), color='#f8f9fa')
+        draw = ImageDraw.Draw(img)
+        
+        try:
+            fuente = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 14)
+        except:
+            fuente = ImageFont.load_default()
+        
+        # Título
+        draw.text((ancho_total//2 - 70, 10), "SUPER RIFA", fill='#1e3a5f', font=fuente)
+        
+        # Cuadrícula
+        for fila in range(filas):
+            for col in range(columnas):
+                numero = f"{fila * columnas + col:02d}"
+                estado = estados.get(numero, "Disponible")
+                
+                x0 = 20 + col * ancho_celda
+                y0 = 50 + fila * alto_celda
+                x1 = x0 + ancho_celda - 1
+                y1 = y0 + alto_celda - 1
+                
+                if estado == "Disponible":
+                    color = '#10b981'
+                elif estado == "Reservado":
+                    color = '#f59e0b'
+                else:
+                    color = '#ef4444'
+                
+                draw.rectangle([x0, y0, x1, y1], fill=color, outline='white')
+                draw.text((x0 + 18, y0 + 18), numero, fill='white', font=fuente)
+        
+        img_bytes = io.BytesIO()
+        img.save(img_bytes, format='PNG')
+        img_bytes.seek(0)
+        return img_bytes
+    except Exception as e:
+        return None
+
+# ========== MOSTRAR IMAGEN ACTUALIZADA ==========
+st.markdown("---")
+st.markdown("### 📸 Vista previa de la rifa (actualizada cada 10 minutos)")
+
+imagen = generar_imagen_rifa()
+if imagen:
+    st.image(imagen, use_container_width=True)
+    st.caption(f"🕐 Última actualización: {time.strftime('%H:%M:%S')}")
+    
+    # Botón para descargar la imagen
+    st.download_button(
+        label="📥 Descargar imagen actualizada",
+        data=imagen,
+        file_name="rifa_actualizada.png",
+        mime="image/png"
+    )
+else:
+    st.error("Error al generar la imagen")
+
+# ========== FOOTER ==========
 st.markdown('<div class="sorteo-texto">🎲 SORTEO POR QUINIELA NACIONAL MATUTINA - AL VENDERSE TODOS LOS NÚMEROS 🎲</div>', unsafe_allow_html=True)
 st.markdown('<div class="pago-texto">💰 PAGOS POR TRANSFERENCIA AL ALIAS:<br><div class="alias-destacado">Tomas.130611</div></div>', unsafe_allow_html=True)
 
