@@ -7,7 +7,7 @@ import json
 
 st.set_page_config(page_title="SUPER RIFA", page_icon="✂️", layout="wide")
 
-# CSS con Grid forzado para móvil
+# CSS para forzar cuadrícula 10x10 en móvil
 st.markdown("""
 <style>
 .stApp { background: linear-gradient(135deg, #f8f9fa 0%, #f0f2f5 100%); }
@@ -25,30 +25,56 @@ st.markdown("""
 .pago-texto { text-align: center; margin-top: 15px; padding: 15px; background: #1e3a5f; border-radius: 15px; color: white; }
 .alias-destacado { font-size: 1.3em; font-weight: bold; color: #c9a03d; background: rgba(255,255,255,0.1); display: inline-block; padding: 6px 16px; border-radius: 30px; }
 
-/* ESTILO PARA FORZAR 10 COLUMNAS EN MÓVIL */
+/* FUERZA 10 COLUMNAS EN MÓVIL */
+.row-widget.stHorizontal {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    gap: 4px !important;
+}
+
+.row-widget.stHorizontal > div {
+    flex: 1 1 calc(10% - 4px) !important;
+    min-width: calc(10% - 4px) !important;
+    max-width: calc(10% - 4px) !important;
+    margin: 2px 0 !important;
+}
+
+/* Ajustes para móvil */
 @media (max-width: 768px) {
     .stButton button { 
-        font-size: 10px; 
-        padding: 6px 2px;
-        min-width: 32px;
-    }
-    /* Forzar que los contenedores de columnas sean flexibles pero mantengan 10 por fila */
-    .row-widget.stHorizontal {
-        flex-wrap: wrap !important;
-        display: flex !important;
-        gap: 4px;
-    }
-    .row-widget.stHorizontal > div {
-        flex: 0 0 calc(10% - 4px) !important;
-        max-width: calc(10% - 4px) !important;
-        min-width: calc(10% - 4px) !important;
-        margin: 2px 0 !important;
+        font-size: 11px !important; 
+        padding: 8px 2px !important;
+        min-width: 0 !important;
     }
     .premio-card { padding: 8px 4px; font-size: 10px; }
-    .premio-numero { width: 25px; height: 25px; font-size: 10px; }
+    .premio-numero { width: 28px; height: 28px; font-size: 11px; }
     .main-title { font-size: 1.5em; }
     .info-card h3 { font-size: 1em; }
     .precio-destacado { font-size: 1.3em; }
+    .row-widget.stHorizontal {
+        gap: 3px !important;
+    }
+    .row-widget.stHorizontal > div {
+        flex: 1 1 calc(10% - 3px) !important;
+        min-width: calc(10% - 3px) !important;
+        max-width: calc(10% - 3px) !important;
+    }
+}
+
+/* Para pantallas muy pequeñas */
+@media (max-width: 480px) {
+    .stButton button { 
+        font-size: 9px !important; 
+        padding: 5px 1px !important;
+    }
+    .row-widget.stHorizontal {
+        gap: 2px !important;
+    }
+    .row-widget.stHorizontal > div {
+        flex: 1 1 calc(10% - 2px) !important;
+        min-width: calc(10% - 2px) !important;
+        max-width: calc(10% - 2px) !important;
+    }
 }
 </style>
 """, unsafe_allow_html=True)
@@ -66,7 +92,7 @@ for i, col in enumerate([col1, col2, col3, col4, col5]):
 st.markdown('<div class="info-card"><h3>🎲 NÚMEROS DEL 00 AL 99</h3><div class="precio-destacado">$3.000 CADA NÚMERO</div></div>', unsafe_allow_html=True)
 st.markdown('<div class="promo-oferta"><p>🎁 ¡PROMOCIÓN ESPECIAL! 🎁</p><span>2 NÚMEROS POR $5.000</span></div>', unsafe_allow_html=True)
 
-# Conectar con Google Sheets
+# Conectar con Google Sheets (sin mensaje de éxito)
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
 
 try:
@@ -74,7 +100,7 @@ try:
     creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
     client = gspread.authorize(creds)
     sheet = client.open("Rifa").sheet1
-    st.success("✅ Conectado a Google Sheets")
+    # No mostramos mensaje de éxito
 except Exception as e:
     st.error(f"❌ Error de conexión: {str(e)}")
     st.stop()
@@ -86,7 +112,7 @@ df = pd.DataFrame(datos[1:], columns=datos[0])
 st.markdown("### 🎲 ¡ELEGÍ TUS NÚMEROS!")
 st.markdown("🟢 **Disponible** | 🟠 **Reservado** | 🔴 **Vendido**")
 
-# ========== UNA SOLA CUADRÍCULA DE NÚMEROS ==========
+# ========== CUADRÍCULA DE NÚMEROS ==========
 # Usar st.columns con CSS que fuerza 10 columnas en móvil
 for fila in range(10):
     cols = st.columns(10)
