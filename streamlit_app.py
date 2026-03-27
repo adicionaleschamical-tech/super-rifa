@@ -44,16 +44,13 @@ def verificar_usuario(username, password):
         sheet = client.open("Rifa").worksheet("Usuarios")
         datos = sheet.get_all_values()
         
-        # Buscar usuario
-        for fila in datos[1:]:  # Saltar encabezado
-            if len(fila) >= 4 and fila[0] == username and fila[3] == "SI":  # Activo = SI
-                # Verificar contraseña
+        for fila in datos[1:]:
+            if len(fila) >= 4 and fila[0] == username and fila[3] == "SI":
                 hash_ingresado = hashlib.sha256(password.encode()).hexdigest()
                 if hash_ingresado == fila[1]:
-                    return True, fila[2]  # rol
+                    return True, fila[2]
         return False, None
     except Exception as e:
-        st.error(f"Error de verificación: {e}")
         return False, None
 
 # ========== FUNCIONES PARA CARGAR DATOS ==========
@@ -84,6 +81,7 @@ def obtener_config_default():
         "alias": "Tomas.130611",
         "telefono": "3826448225",
         "sorteo_texto": "Quiniela Nacional Matutina",
+        "fecha_sorteo": "Pendiente",
         "footer_texto": "¡Gracias por participar!"
     }
 
@@ -144,7 +142,6 @@ def actualizar_estado(numero, estado, nombre="", dni="", telefono=""):
             pass
     return False
 
-# ========== FUNCIONES DE ADMINISTRACIÓN ==========
 def guardar_config(config):
     """Guardar configuración (solo admin)"""
     if not client or st.session_state.user_role != "admin":
@@ -164,22 +161,18 @@ def guardar_premios(premios):
         return False
     try:
         sheet = client.open("Rifa").worksheet("Premios")
-        # Obtener todas las filas
         todas_filas = sheet.get_all_values()
         if len(todas_filas) > 1:
-            # Limpiar desde fila 2 hasta el final
             for i in range(len(todas_filas), 1, -1):
                 sheet.delete_rows(i)
         
-        # Escribir nuevos datos
         for i, p in enumerate(premios, start=2):
             sheet.update_cell(i, 1, p['icono'])
             sheet.update_cell(i, 2, p['titulo'])
             sheet.update_cell(i, 3, p['descripcion'])
             sheet.update_cell(i, 4, p['orden'])
         return True
-    except Exception as e:
-        st.error(f"Error: {e}")
+    except:
         return False
 
 # ========== MOSTRAR LOGIN ==========
@@ -235,6 +228,7 @@ def mostrar_admin_panel(config, premios):
                 nuevo_alias = st.text_input("Alias de transferencia", value=config.get("alias", "Tomas.130611"))
                 nuevo_telefono = st.text_input("WhatsApp", value=config.get("telefono", "3826448225"))
                 nuevo_sorteo = st.text_input("Texto del sorteo", value=config.get("sorteo_texto", "Quiniela Nacional Matutina"))
+                nueva_fecha = st.text_input("📅 Fecha del sorteo", value=config.get("fecha_sorteo", "Pendiente"))
                 
                 if st.form_submit_button("💾 Guardar Configuración"):
                     nueva_config = {
@@ -248,6 +242,7 @@ def mostrar_admin_panel(config, premios):
                         "alias": nuevo_alias,
                         "telefono": nuevo_telefono,
                         "sorteo_texto": nuevo_sorteo,
+                        "fecha_sorteo": nueva_fecha,
                         "footer_texto": config.get("footer_texto", "¡Gracias por participar!")
                     }
                     if guardar_config(nueva_config):
@@ -283,24 +278,23 @@ def mostrar_admin_panel(config, premios):
         
         with tab3:
             st.markdown("### Gestión de Usuarios")
-            st.info("📌 Solo administradores pueden crear/modificar usuarios")
+            st.info("📌 Para agregar usuarios, editá directamente el Google Sheet en la pestaña 'Usuarios'")
+            st.markdown("""
+            **Estructura de la pestaña Usuarios:**
+            - Columna A: Usuario
+            - Columna B: Contraseña (hash SHA256)
+            - Columna C: Rol (admin / editor)
+            - Columna D: Activo (SI / NO)
             
-            with st.form("nuevo_usuario"):
-                st.markdown("#### Agregar nuevo usuario")
-                nuevo_user = st.text_input("Usuario")
-                nueva_pass = st.text_input("Contraseña", type="password")
-                nuevo_rol = st.selectbox("Rol", ["editor", "admin"])
-                if st.form_submit_button("➕ Agregar Usuario"):
-                    if nuevo_user and nueva_pass:
-                        # Aquí iría la lógica para agregar usuario al Sheet
-                        st.info("Funcionalidad en desarrollo")
-                    else:
-                        st.error("Complete todos los campos")
+            **Contraseñas de ejemplo:**
+            - 'admin' → hash: `8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918`
+            - 'editor' → hash: `5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8`
+            """)
     
     else:
         # Editor: solo puede personalizar visual
         st.markdown("### 🎨 Personalización Visual")
-        st.info("Como Editor, podés modificar colores, textos y precios")
+        st.info("Como Editor, podés modificar colores, textos, precios y fecha del sorteo")
         
         with st.form("editor_form"):
             nuevo_titulo = st.text_input("Título", value=config.get("titulo", "SUPER RIFA"))
@@ -309,6 +303,10 @@ def mostrar_admin_panel(config, premios):
             nuevo_color_secundario = st.color_picker("Color secundario", value=config.get("color_secundario", "#c9a03d"))
             nuevo_precio = st.number_input("Precio por número ($)", value=int(config.get("precio_unidad", 3000)))
             nuevo_precio_promo = st.number_input("Precio promoción 2x ($)", value=int(config.get("precio_promo", 5000)))
+            nuevo_alias = st.text_input("Alias de transferencia", value=config.get("alias", "Tomas.130611"))
+            nuevo_telefono = st.text_input("WhatsApp", value=config.get("telefono", "3826448225"))
+            nuevo_sorteo = st.text_input("Texto del sorteo", value=config.get("sorteo_texto", "Quiniela Nacional Matutina"))
+            nueva_fecha = st.text_input("📅 Fecha del sorteo", value=config.get("fecha_sorteo", "Pendiente"))
             
             if st.form_submit_button("💾 Guardar Cambios"):
                 nueva_config = {
@@ -319,9 +317,10 @@ def mostrar_admin_panel(config, premios):
                     "precio_unidad": str(nuevo_precio),
                     "precio_promo": str(nuevo_precio_promo),
                     "cantidad_promo": "2",
-                    "alias": config.get("alias", "Tomas.130611"),
-                    "telefono": config.get("telefono", "3826448225"),
-                    "sorteo_texto": config.get("sorteo_texto", "Quiniela Nacional Matutina"),
+                    "alias": nuevo_alias,
+                    "telefono": nuevo_telefono,
+                    "sorteo_texto": nuevo_sorteo,
+                    "fecha_sorteo": nueva_fecha,
                     "footer_texto": config.get("footer_texto", "¡Gracias por participar!")
                 }
                 if guardar_config(nueva_config):
@@ -355,6 +354,7 @@ def generar_css(config):
     .pago-texto {{ text-align: center; margin-top: 15px; padding: 15px; background: {color_principal}; border-radius: 15px; color: white; }}
     .alias-destacado {{ font-size: 1.3em; font-weight: bold; color: {color_secundario}; background: rgba(255,255,255,0.1); display: inline-block; padding: 6px 16px; border-radius: 30px; }}
     .orientacion-box {{ background: #fef3c7; border-left: 5px solid {color_secundario}; padding: 15px; margin: 20px 0; border-radius: 12px; text-align: center; }}
+    .fecha-box {{ background: #f0f2f5; border-radius: 15px; padding: 12px; text-align: center; margin: 15px 0; }}
     @media (max-width: 768px) {{ .stButton button {{ padding: 10px 3px !important; font-size: 13px !important; }} .premio-card {{ padding: 10px 4px; font-size: 11px; }} .premio-numero {{ width: 30px; height: 30px; font-size: 12px; }} }}
     </style>
     """
@@ -439,6 +439,13 @@ def mostrar_rifa_publica(config, premios):
     
     st.markdown(f'<div class="info-card"><h3>🎲 NÚMEROS DEL 00 AL 99</h3><div class="precio-destacado">${precio_unidad:,} CADA NÚMERO</div></div>', unsafe_allow_html=True)
     st.markdown(f'<div class="promo-oferta"><p>🎁 ¡PROMOCIÓN ESPECIAL! 🎁</p><span>{cantidad_promo} NÚMEROS POR ${precio_promo:,}</span></div>', unsafe_allow_html=True)
+    
+    # Fecha del sorteo
+    fecha_sorteo = config.get("fecha_sorteo", "Pendiente")
+    if fecha_sorteo and fecha_sorteo != "Pendiente":
+        st.markdown(f'<div class="fecha-box"><strong>📅 Fecha del sorteo:</strong> {fecha_sorteo}</div>', unsafe_allow_html=True)
+    else:
+        st.markdown(f'<div class="fecha-box"><strong>📅 Sorteo:</strong> Se realizará cuando se completen todos los números</div>', unsafe_allow_html=True)
     
     # Mensaje orientación
     st.markdown("""
@@ -528,6 +535,7 @@ def mostrar_rifa_publica(config, premios):
     imagen = generar_imagen_rifa()
     if imagen:
         st.image(imagen, use_container_width=True)
+        st.caption("🕐 Imagen actualizada cada 10 minutos")
         st.download_button(
             label="📥 Descargar imagen",
             data=imagen,
@@ -537,15 +545,18 @@ def mostrar_rifa_publica(config, premios):
 
 # ========== SIDEBAR ==========
 def mostrar_sidebar(config):
+    precio_unidad = int(config.get("precio_unidad", 3000))
+    precio_promo = int(config.get("precio_promo", 5000))
+    
     with st.sidebar:
         st.markdown(f"### ✂️ {config.get('titulo', 'SUPER RIFA')}")
         st.markdown("---")
-        st.markdown("""
+        st.markdown(f"""
         **🎯 ¿CÓMO PARTICIPAR?**
         
         1️⃣ Elegí un número **VERDE**
         2️⃣ Completá tus datos
-        3️⃣ Transferí al alias
+        3️⃣ Transferí a: **{config.get('alias', 'Tomas.130611')}**
         4️⃣ ¡Listo! Ya tenés tu número
         
         ---
@@ -558,22 +569,22 @@ def mostrar_sidebar(config):
         
         ---
         
-        **📅 SORTEO**
+        **💰 PRECIOS**
         
-        🎲 Quiniela Nacional Matutina  
-        ⏰ Cuando se vendan todos los números
+        • 1 número: ${precio_unidad:,}
+        • 2 números: ${precio_promo:,}
         
         ---
         
-        **💎 PROMO ESPECIAL**
+        **📅 SORTEO**
         
-        ¡Llevá 2 números por **$5.000**!
+        🎲 {config.get('sorteo_texto', 'Quiniela Nacional Matutina')}
         
         ---
         
         **📞 CONTACTO**
         
-        WhatsApp: 3826448225
+        WhatsApp: {config.get('telefono', '3826448225')}
         """)
 
 # ========== MAIN ==========
@@ -586,15 +597,12 @@ def main():
     
     # Verificar si está logueado
     if st.session_state.logged_in:
-        # Cargar premios para admin
         premios = cargar_premios()
         mostrar_admin_panel(config, premios)
     else:
-        # Mostrar la rifa pública
         premios = cargar_premios()
         mostrar_rifa_publica(config, premios)
         
-        # Botón para login (pequeño al final)
         with st.expander("🔐 Acceso Administrativo"):
             mostrar_login()
 
