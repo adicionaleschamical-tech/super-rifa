@@ -7,7 +7,7 @@ import json
 
 st.set_page_config(page_title="SUPER RIFA", page_icon="✂️", layout="wide")
 
-# CSS para diagnóstico y grid
+# CSS
 st.markdown("""
 <style>
 .stApp { background: linear-gradient(135deg, #f8f9fa 0%, #f0f2f5 100%); }
@@ -23,38 +23,45 @@ st.markdown("""
 .pago-texto { text-align: center; margin-top: 15px; padding: 15px; background: #1e3a5f; border-radius: 15px; color: white; }
 .alias-destacado { font-size: 1.3em; font-weight: bold; color: #c9a03d; background: rgba(255,255,255,0.1); display: inline-block; padding: 6px 16px; border-radius: 30px; }
 
-/* ESTILOS PARA LOS BOTONES */
+/* Botones - más grandes y legibles */
 .stButton button {
     background-color: #10b981 !important;
     color: white !important;
     border: none !important;
-    border-radius: 10px !important;
-    padding: 8px 0 !important;
-    font-size: 14px !important;
+    border-radius: 12px !important;
+    padding: 12px 5px !important;
+    font-size: 15px !important;
     font-weight: bold !important;
     width: 100% !important;
     cursor: pointer !important;
+    transition: all 0.2s ease !important;
 }
 
 .stButton button:hover {
     background-color: #059669 !important;
+    transform: translateY(-2px);
 }
 
 .stButton button:disabled {
     background-color: #f59e0b !important;
     color: white !important;
     cursor: not-allowed !important;
+    transform: none !important;
 }
 
-/* CAJA DE DIAGNÓSTICO */
-.diagnostico-box {
-    background: #f1f5f9;
-    border-left: 4px solid #1e3a5f;
-    padding: 15px;
-    margin: 20px 0;
-    border-radius: 10px;
-    font-family: monospace;
-    font-size: 12px;
+/* Botones vendidos */
+button[kind="secondary"][disabled] {
+    background-color: #ef4444 !important;
+}
+
+/* Ajustes para móvil */
+@media (max-width: 768px) {
+    .stButton button {
+        padding: 10px 3px !important;
+        font-size: 13px !important;
+    }
+    .premio-card { padding: 10px 4px; font-size: 11px; }
+    .premio-numero { width: 30px; height: 30px; font-size: 12px; }
 }
 </style>
 """, unsafe_allow_html=True)
@@ -71,32 +78,6 @@ for i, col in enumerate([col1, col2, col3, col4, col5]):
 
 st.markdown('<div class="info-card"><h3>🎲 NÚMEROS DEL 00 AL 99</h3><div class="precio-destacado">$3.000 CADA NÚMERO</div></div>', unsafe_allow_html=True)
 st.markdown('<div class="promo-oferta"><p>🎁 ¡PROMOCIÓN ESPECIAL! 🎁</p><span>2 NÚMEROS POR $5.000</span></div>', unsafe_allow_html=True)
-
-# ========== DIAGNÓSTICO ==========
-with st.expander("🔧 DIAGNÓSTICO - Hacé clic acá si los números no se ven en grilla"):
-    st.markdown('<div class="diagnostico-box">', unsafe_allow_html=True)
-    
-    # Detectar dispositivo
-    import streamlit.web.cli as cli
-    user_agent = st.context.headers.get('User-Agent', 'No detectado')
-    
-    st.write("**Información de tu dispositivo:**")
-    st.write(f"- **User Agent:** `{user_agent}`")
-    st.write(f"- **Ancho de pantalla detectado:** Usá el zoom del navegador")
-    
-    st.write("---")
-    st.write("**¿Cómo solucionarlo en tu celular?**")
-    st.write("1. **Hacé ZOOM OUT** (pellizcar hacia adentro con dos dedos) en la pantalla")
-    st.write("2. **Girá el celular horizontalmente** (modo landscape)")
-    st.write("3. **Si ves los números en una sola columna**, es normal que Streamlit en móvil apile las columnas")
-    st.write("4. **La solución definitiva:** usá la app en una tablet o computadora, o hacé zoom out")
-    
-    st.write("---")
-    st.write("**Prueba técnica:**")
-    st.write("Si ves este texto, el código está funcionando correctamente.")
-    st.write("El problema es que **Streamlit en móvil no soporta 10 columnas horizontales**.")
-    
-    st.markdown('</div>', unsafe_allow_html=True)
 
 # Conectar con Google Sheets
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
@@ -121,30 +102,31 @@ st.markdown("🟢 **Verde = Disponible** | 🟠 **Reservado** | 🔴 **Vendido**
 if 'numero_seleccionado' not in st.session_state:
     st.session_state.numero_seleccionado = None
 
-# ========== BOTONES NATIVOS DE STREAMLIT ==========
-st.markdown("**⚠️ IMPORTANTE EN CELULAR:** Hacé **ZOOM OUT** (pellizcar hacia adentro) para ver los números en fila.")
-
-for fila in range(10):
-    columnas = st.columns(10)
-    for col_idx in range(10):
-        numero = f"{fila * 10 + col_idx:02d}"
-        
-        # Buscar estado
-        estado = "Disponible"
-        for _, row in df.iterrows():
-            if str(row['Número']).strip() == numero:
-                estado = row['Estado']
-                break
-        
-        with columnas[col_idx]:
-            if estado == "Disponible":
-                if st.button(f"🟢 {numero}", key=f"btn_{numero}", use_container_width=True):
-                    st.session_state.numero_seleccionado = numero
-                    st.rerun()
-            elif estado == "Reservado":
-                st.button(f"🟠 {numero}", key=f"btn_{numero}", disabled=True, use_container_width=True)
-            else:
-                st.button(f"🔴 {numero}", key=f"btn_{numero}", disabled=True, use_container_width=True)
+# ========== 5 COLUMNAS x 20 FILAS ==========
+# Esto funciona perfecto en móvil vertical
+for fila in range(20):  # 20 filas
+    columnas = st.columns(5)  # 5 columnas por fila
+    for col_idx in range(5):
+        numero_num = fila * 5 + col_idx
+        if numero_num <= 99:
+            numero = f"{numero_num:02d}"
+            
+            # Buscar estado
+            estado = "Disponible"
+            for _, row in df.iterrows():
+                if str(row['Número']).strip() == numero:
+                    estado = row['Estado']
+                    break
+            
+            with columnas[col_idx]:
+                if estado == "Disponible":
+                    if st.button(f"🟢 {numero}", key=f"btn_{numero}", use_container_width=True):
+                        st.session_state.numero_seleccionado = numero
+                        st.rerun()
+                elif estado == "Reservado":
+                    st.button(f"🟠 {numero}", key=f"btn_{numero}", disabled=True, use_container_width=True)
+                else:
+                    st.button(f"🔴 {numero}", key=f"btn_{numero}", disabled=True, use_container_width=True)
 
 # ========== FORMULARIO DE RESERVA ==========
 if st.session_state.numero_seleccionado:
