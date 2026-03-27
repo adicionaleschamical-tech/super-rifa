@@ -440,7 +440,7 @@ def mostrar_rifa_publica(config, premios):
     st.markdown(f'<div class="info-card"><h3>🎲 NÚMEROS DEL 00 AL 99</h3><div class="precio-destacado">${precio_unidad:,} CADA NÚMERO</div></div>', unsafe_allow_html=True)
     st.markdown(f'<div class="promo-oferta"><p>🎁 ¡PROMOCIÓN ESPECIAL! 🎁</p><span>{cantidad_promo} NÚMEROS POR ${precio_promo:,}</span></div>', unsafe_allow_html=True)
     
-    # Fecha del sorteo
+    # Fecha del sorteo (bloque superior)
     fecha_sorteo = config.get("fecha_sorteo", "Pendiente")
     if fecha_sorteo and fecha_sorteo != "Pendiente":
         st.markdown(f'<div class="fecha-box"><strong>📅 Fecha del sorteo:</strong> {fecha_sorteo}</div>', unsafe_allow_html=True)
@@ -525,8 +525,13 @@ def mostrar_rifa_publica(config, premios):
                         else:
                             st.error("❌ Error al reservar")
     
-    # Footer
-    st.markdown(f'<div class="sorteo-texto">🎲 SORTEO POR {config.get("sorteo_texto", "QUINIELA NACIONAL MATUTINA")} - AL VENDERSE TODOS LOS NÚMEROS 🎲</div>', unsafe_allow_html=True)
+    # Footer con fecha condicional
+    fecha_sorteo = config.get("fecha_sorteo", "Pendiente")
+    if fecha_sorteo and fecha_sorteo != "Pendiente":
+        st.markdown(f'<div class="sorteo-texto">🎲 SORTEO POR {config.get("sorteo_texto", "QUINIELA NACIONAL MATUTINA")} - {fecha_sorteo} 🎲</div>', unsafe_allow_html=True)
+    else:
+        st.markdown(f'<div class="sorteo-texto">🎲 SORTEO POR {config.get("sorteo_texto", "QUINIELA NACIONAL MATUTINA")} - AL VENDERSE TODOS LOS NÚMEROS 🎲</div>', unsafe_allow_html=True)
+    
     st.markdown(f'<div class="pago-texto">💰 PAGOS POR TRANSFERENCIA AL ALIAS:<br><div class="alias-destacado">{config.get("alias", "Tomas.130611")}</div></div>', unsafe_allow_html=True)
     
     # Imagen actualizada
