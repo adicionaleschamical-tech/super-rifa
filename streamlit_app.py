@@ -7,7 +7,7 @@ import json
 
 st.set_page_config(page_title="SUPER RIFA", page_icon="✂️", layout="wide")
 
-# CSS
+# CSS con ancho fijo para botones
 st.markdown("""
 <style>
 .stApp { background: linear-gradient(135deg, #f8f9fa 0%, #f0f2f5 100%); }
@@ -23,18 +23,18 @@ st.markdown("""
 .pago-texto { text-align: center; margin-top: 15px; padding: 15px; background: #1e3a5f; border-radius: 15px; color: white; }
 .alias-destacado { font-size: 1.3em; font-weight: bold; color: #c9a03d; background: rgba(255,255,255,0.1); display: inline-block; padding: 6px 16px; border-radius: 30px; }
 
-/* Botones */
+/* BOTONES CON ANCHO FIJO */
 .stButton button {
     background-color: #10b981 !important;
     color: white !important;
     border: none !important;
     border-radius: 12px !important;
-    padding: 12px 5px !important;
-    font-size: 15px !important;
+    padding: 10px 5px !important;
+    font-size: 14px !important;
     font-weight: bold !important;
-    width: 100% !important;
     cursor: pointer !important;
     transition: all 0.2s ease !important;
+    white-space: nowrap !important;
 }
 
 .stButton button:hover {
@@ -49,32 +49,50 @@ st.markdown("""
     transform: none !important;
 }
 
-/* Botones vendidos */
 button[kind="secondary"][disabled] {
     background-color: #ef4444 !important;
 }
 
-/* Ajustes para móvil - 4 columnas */
+/* FORZAR QUE LAS COLUMNAS TENGAN ANCHO FIJO */
+[data-testid="column"] {
+    min-width: 70px !important;
+    width: 70px !important;
+    flex: 0 0 70px !important;
+}
+
+/* EN MÓVIL, REDUCIR EL ANCHO */
 @media (max-width: 768px) {
+    [data-testid="column"] {
+        min-width: 55px !important;
+        width: 55px !important;
+        flex: 0 0 55px !important;
+    }
     .stButton button {
-        padding: 10px 4px !important;
-        font-size: 14px !important;
+        padding: 8px 2px !important;
+        font-size: 12px !important;
     }
     .premio-card { padding: 8px 4px; font-size: 10px; }
     .premio-numero { width: 28px; height: 28px; font-size: 11px; }
-    .main-title { font-size: 1.5em; }
 }
 
-/* Forzar que las columnas no se apilen en móvil */
-@media (max-width: 768px) {
-    .row-widget.stHorizontal {
-        flex-wrap: nowrap !important;
-        gap: 6px !important;
+@media (max-width: 480px) {
+    [data-testid="column"] {
+        min-width: 48px !important;
+        width: 48px !important;
+        flex: 0 0 48px !important;
     }
-    .row-widget.stHorizontal > div {
-        flex: 1 1 0 !important;
-        min-width: 0 !important;
+    .stButton button {
+        padding: 6px 1px !important;
+        font-size: 10px !important;
     }
+}
+
+/* FORZAR QUE LAS FILAS NO APILEN */
+.row-widget.stHorizontal {
+    flex-wrap: nowrap !important;
+    overflow-x: auto !important;
+    gap: 6px !important;
+    padding-bottom: 10px !important;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -115,10 +133,9 @@ st.markdown("🟢 **Verde = Disponible** | 🟠 **Reservado** | 🔴 **Vendido**
 if 'numero_seleccionado' not in st.session_state:
     st.session_state.numero_seleccionado = None
 
-# ========== 4 COLUMNAS x 25 FILAS ==========
-# Esto debería funcionar en móvil vertical
-for fila in range(25):  # 25 filas
-    columnas = st.columns(4)  # 4 columnas por fila
+# ========== 4 COLUMNAS x 25 FILAS CON ANCHO FIJO ==========
+for fila in range(25):
+    columnas = st.columns(4)
     for col_idx in range(4):
         numero_num = fila * 4 + col_idx
         if numero_num <= 99:
@@ -133,13 +150,13 @@ for fila in range(25):  # 25 filas
             
             with columnas[col_idx]:
                 if estado == "Disponible":
-                    if st.button(f"🟢 {numero}", key=f"btn_{numero}", use_container_width=True):
+                    if st.button(f"🟢 {numero}", key=f"btn_{numero}", use_container_width=False):
                         st.session_state.numero_seleccionado = numero
                         st.rerun()
                 elif estado == "Reservado":
-                    st.button(f"🟠 {numero}", key=f"btn_{numero}", disabled=True, use_container_width=True)
+                    st.button(f"🟠 {numero}", key=f"btn_{numero}", disabled=True, use_container_width=False)
                 else:
-                    st.button(f"🔴 {numero}", key=f"btn_{numero}", disabled=True, use_container_width=True)
+                    st.button(f"🔴 {numero}", key=f"btn_{numero}", disabled=True, use_container_width=False)
 
 # ========== FORMULARIO DE RESERVA ==========
 if st.session_state.numero_seleccionado:
