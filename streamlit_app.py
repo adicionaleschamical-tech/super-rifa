@@ -7,7 +7,7 @@ import json
 
 st.set_page_config(page_title="SUPER RIFA", page_icon="✂️", layout="wide")
 
-# CSS FUERTE para forzar 10 columnas en móvil
+# CSS
 st.markdown("""
 <style>
 .stApp { background: linear-gradient(135deg, #f8f9fa 0%, #f0f2f5 100%); }
@@ -23,77 +23,67 @@ st.markdown("""
 .pago-texto { text-align: center; margin-top: 15px; padding: 15px; background: #1e3a5f; border-radius: 15px; color: white; }
 .alias-destacado { font-size: 1.3em; font-weight: bold; color: #c9a03d; background: rgba(255,255,255,0.1); display: inline-block; padding: 6px 16px; border-radius: 30px; }
 
-/* FORZAR QUE CADA FILA TENGA 10 COLUMNAS IGUALES */
-[data-testid="column"] {
-    min-width: 0 !important;
-    flex: 1 1 0% !important;
+/* GRID DE NÚMEROS - FUNCIONA EN TODOS LOS DISPOSITIVOS */
+.numero-grid {
+    display: grid;
+    grid-template-columns: repeat(10, 1fr);
+    gap: 8px;
+    margin: 20px 0;
+    width: 100%;
 }
 
-/* BOTONES */
-.stButton button {
-    background: white !important;
-    color: #1e3a5f !important;
-    border: 2px solid #cbd5e1 !important;
-    border-radius: 12px !important;
-    padding: 10px 5px !important;
-    font-size: 13px !important;
-    font-weight: bold !important;
-    width: 100% !important;
-    text-align: center !important;
-    cursor: pointer !important;
-    transition: all 0.2s ease !important;
+.numero-btn {
+    background-color: #10b981;
+    color: #1e293b;
+    border: none;
+    border-radius: 12px;
+    padding: 12px 5px;
+    font-size: 14px;
+    font-weight: bold;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    width: 100%;
+    font-family: monospace;
 }
 
-.stButton button:hover {
-    background: #f1f5f9 !important;
+.numero-btn:hover {
     transform: translateY(-2px);
-    border-color: #1e3a5f !important;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+    background-color: #059669;
 }
 
-/* Botones reservados */
-.stButton button:disabled {
-    background: #f59e0b !important;
-    color: white !important;
-    border-color: #f59e0b !important;
-    cursor: not-allowed !important;
-    opacity: 0.9 !important;
+.numero-btn.reservado {
+    background-color: #f59e0b;
+    color: white;
+    cursor: not-allowed;
 }
 
-/* Botones vendidos */
-button[disabled] {
-    background: #ef4444 !important;
-    color: white !important;
-    border-color: #ef4444 !important;
+.numero-btn.vendido {
+    background-color: #ef4444;
+    color: white;
+    cursor: not-allowed;
 }
 
-/* RESPONSIVE MÓVIL - FORZAR 10 COLUMNAS */
 @media (max-width: 768px) {
-    .stButton button {
-        padding: 8px 2px !important;
-        font-size: 11px !important;
-        white-space: nowrap !important;
+    .numero-grid {
+        gap: 4px;
+    }
+    .numero-btn {
+        padding: 8px 2px;
+        font-size: 11px;
     }
     .premio-card { padding: 8px 4px; font-size: 10px; }
     .premio-numero { width: 28px; height: 28px; font-size: 11px; }
-    .main-title { font-size: 1.5em; }
 }
 
 @media (max-width: 480px) {
-    .stButton button {
-        padding: 6px 1px !important;
-        font-size: 9px !important;
+    .numero-btn {
+        padding: 6px 1px;
+        font-size: 9px;
     }
-}
-
-/* Forzar que las filas de columnas se mantengan en línea */
-.row-widget.stHorizontal {
-    flex-wrap: nowrap !important;
-    gap: 6px !important;
-}
-
-@media (max-width: 768px) {
-    .row-widget.stHorizontal {
-        gap: 3px !important;
+    .numero-grid {
+        gap: 3px;
     }
 }
 </style>
@@ -129,35 +119,51 @@ datos = sheet.get_all_values()
 df = pd.DataFrame(datos[1:], columns=datos[0])
 
 st.markdown("### 🎲 ¡ELEGÍ TUS NÚMEROS!")
-st.markdown("⚪ **Disponible** | 🟠 **Reservado** | 🔴 **Vendido**")
+st.markdown("🟢 **Verde = Disponible** | 🟠 **Reservado** | 🔴 **Vendido**")
 
-# ========== BOTONES NATIVOS DE STREAMLIT ==========
-for fila in range(10):
-    cols = st.columns(10)
-    for col_idx in range(10):
-        numero_num = fila * 10 + col_idx
-        numero = f"{numero_num:02d}"
-        
-        # Buscar estado del número
-        estado = "Disponible"
-        if len(df[df['Número'] == numero]) > 0:
-            estado = df[df['Número'] == numero]['Estado'].values[0]
-        
-        with cols[col_idx]:
-            if estado == "Disponible":
-                # Botón BLANCO con borde
-                if st.button(f"⚪ {numero}", key=f"num_{numero}", use_container_width=True):
-                    st.session_state.numero_seleccionado = numero
-                    st.rerun()
-            elif estado == "Reservado":
-                # Botón NARANJA
-                st.button(f"🟠 {numero}", key=f"num_{numero}", disabled=True, use_container_width=True)
-            else:
-                # Botón ROJO
-                st.button(f"🔴 {numero}", key=f"num_{numero}", disabled=True, use_container_width=True)
+# Crear diccionario de estados
+estados = {}
+for _, row in df.iterrows():
+    estados[str(row['Número']).strip()] = row['Estado']
 
-# Formulario de reserva
-if 'numero_seleccionado' in st.session_state and st.session_state.numero_seleccionado:
+# ========== USAR st.form CON BOTONES HTML ==========
+# Inicializar número seleccionado
+if 'numero_seleccionado' not in st.session_state:
+    st.session_state.numero_seleccionado = None
+
+# Formulario que captura el número seleccionado
+with st.form(key="seleccion_form"):
+    st.markdown("### Seleccioná un número haciendo clic:")
+    
+    # Generar el grid de números con HTML
+    html_grid = '<div class="numero-grid">'
+    for i in range(100):
+        numero = f"{i:02d}"
+        estado = estados.get(numero, "Disponible")
+        
+        if estado == "Disponible":
+            clase = ""
+            html_grid += f'<button type="submit" name="numero" value="{numero}" class="numero-btn">🟢 {numero}</button>'
+        elif estado == "Reservado":
+            html_grid += f'<button class="numero-btn reservado" disabled>🟠 {numero}</button>'
+        else:
+            html_grid += f'<button class="numero-btn vendido" disabled>🔴 {numero}</button>'
+    html_grid += '</div>'
+    
+    # Mostrar el grid
+    st.markdown(html_grid, unsafe_allow_html=True)
+    
+    # Botón oculto para capturar el valor seleccionado
+    numero_seleccionado_form = st.selectbox("", options=[""] + [f"{i:02d}" for i in range(100)], label_visibility="collapsed", key="numero_select")
+    
+    submitted = st.form_submit_button("Confirmar selección", use_container_width=True)
+    
+    if submitted and numero_seleccionado_form:
+        st.session_state.numero_seleccionado = numero_seleccionado_form
+        st.rerun()
+
+# ========== FORMULARIO DE RESERVA ==========
+if st.session_state.numero_seleccionado:
     numero_sel = st.session_state.numero_seleccionado
     
     # Verificar que siga disponible
@@ -212,7 +218,7 @@ with st.sidebar:
     st.markdown("""
     **🎯 ¿CÓMO PARTICIPAR?**
     
-    1️⃣ Elegí un número **BLANCO** (⚪)
+    1️⃣ Elegí un número **VERDE**
     2️⃣ Completá tus datos
     3️⃣ Transferí al alias: **Tomas.130611**
     4️⃣ ¡Listo! Ya tenés tu número
@@ -221,7 +227,7 @@ with st.sidebar:
     
     **🎨 ESTADOS**
     
-    ⚪ Blanco = Disponible  
+    🟢 Verde = Disponible  
     🟠 Naranja = Reservado  
     🔴 Rojo = Vendido
     
