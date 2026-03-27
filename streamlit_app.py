@@ -4,11 +4,10 @@ from google.oauth2.service_account import Credentials
 import pandas as pd
 import time
 import json
-import streamlit.components.v1 as components
 
 st.set_page_config(page_title="SUPER RIFA", page_icon="✂️", layout="wide")
 
-# CSS
+# CSS simple
 st.markdown("""
 <style>
 .stApp { background: linear-gradient(135deg, #f8f9fa 0%, #f0f2f5 100%); }
@@ -24,68 +23,32 @@ st.markdown("""
 .pago-texto { text-align: center; margin-top: 15px; padding: 15px; background: #1e3a5f; border-radius: 15px; color: white; }
 .alias-destacado { font-size: 1.3em; font-weight: bold; color: #c9a03d; background: rgba(255,255,255,0.1); display: inline-block; padding: 6px 16px; border-radius: 30px; }
 
-/* GRID DE NÚMEROS */
-.numero-grid {
-    display: grid;
-    grid-template-columns: repeat(10, 1fr);
-    gap: 8px;
-    margin: 20px 0;
-    width: 100%;
+/* Botones */
+.stButton button {
+    background-color: #10b981 !important;
+    color: white !important;
+    border: none !important;
+    border-radius: 10px !important;
+    padding: 8px 0 !important;
+    font-size: 14px !important;
+    font-weight: bold !important;
+    width: 100% !important;
+    cursor: pointer !important;
 }
 
-.numero-btn {
-    background-color: #10b981;
-    color: #1e293b;
-    border: none;
-    border-radius: 12px;
-    padding: 12px 5px;
-    font-size: 14px;
-    font-weight: bold;
-    text-align: center;
-    cursor: pointer;
-    transition: all 0.2s;
-    width: 100%;
-    font-family: monospace;
+.stButton button:hover {
+    background-color: #059669 !important;
 }
 
-.numero-btn:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 10px rgba(0,0,0,0.2);
-    background-color: #059669;
+.stButton button:disabled {
+    background-color: #f59e0b !important;
+    color: white !important;
+    cursor: not-allowed !important;
 }
 
-.numero-btn.reservado {
-    background-color: #f59e0b;
-    color: white;
-    cursor: not-allowed;
-}
-
-.numero-btn.vendido {
-    background-color: #ef4444;
-    color: white;
-    cursor: not-allowed;
-}
-
-@media (max-width: 768px) {
-    .numero-grid {
-        gap: 4px;
-    }
-    .numero-btn {
-        padding: 8px 2px;
-        font-size: 11px;
-    }
-    .premio-card { padding: 8px 4px; font-size: 10px; }
-    .premio-numero { width: 28px; height: 28px; font-size: 11px; }
-}
-
-@media (max-width: 480px) {
-    .numero-btn {
-        padding: 6px 1px;
-        font-size: 9px;
-    }
-    .numero-grid {
-        gap: 3px;
-    }
+/* Forzar que los botones vendidos tengan otro color */
+button[kind="secondary"][disabled] {
+    background-color: #ef4444 !important;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -122,63 +85,33 @@ df = pd.DataFrame(datos[1:], columns=datos[0])
 st.markdown("### 🎲 ¡ELEGÍ TUS NÚMEROS!")
 st.markdown("🟢 **Verde = Disponible** | 🟠 **Reservado** | 🔴 **Vendido**")
 
-# Crear diccionario de estados
-estados = {}
-for _, row in df.iterrows():
-    estados[str(row['Número']).strip()] = row['Estado']
-
 # Inicializar número seleccionado
 if 'numero_seleccionado' not in st.session_state:
     st.session_state.numero_seleccionado = None
 
-# ========== GENERAR GRID CON COMPONENTS ==========
-# Crear HTML con botones que envían el número a Streamlit
-html_code = """
-<div class="numero-grid">
-"""
-
-for i in range(100):
-    numero = f"{i:02d}"
-    estado = estados.get(numero, "Disponible")
-    
-    if estado == "Disponible":
-        html_code += f'<button class="numero-btn" onclick="seleccionarNumero(\'{numero}\')">🟢 {numero}</button>'
-    elif estado == "Reservado":
-        html_code += f'<button class="numero-btn reservado" disabled>🟠 {numero}</button>'
-    else:
-        html_code += f'<button class="numero-btn vendido" disabled>🔴 {numero}</button>'
-
-html_code += """
-</div>
-
-<script>
-function seleccionarNumero(numero) {
-    // Enviar el número a Streamlit
-    const event = new CustomEvent('streamlit:setComponentValue', {
-        detail: { value: numero }
-    });
-    window.dispatchEvent(event);
-    
-    // También intentar con postMessage
-    if (window.parent) {
-        window.parent.postMessage({
-            type: 'streamlit:setComponentValue',
-            value: numero
-        }, '*');
-    }
-}
-</script>
-"""
-
-# Mostrar el grid
-components.html(html_code, height=650, scrolling=False)
-
-# Input oculto para capturar el número desde JavaScript
-numero_recibido = st.text_input("", key="hidden_input", label_visibility="collapsed")
-
-if numero_recibido:
-    st.session_state.numero_seleccionado = numero_recibido
-    st.rerun()
+# ========== BOTONES NATIVOS DE STREAMLIT ==========
+# Mostrar 10 filas de 10 botones cada una
+for fila in range(10):
+    columnas = st.columns(10)
+    for col_idx in range(10):
+        numero = f"{fila * 10 + col_idx:02d}"
+        
+        # Buscar estado
+        estado = "Disponible"
+        for _, row in df.iterrows():
+            if str(row['Número']).strip() == numero:
+                estado = row['Estado']
+                break
+        
+        with columnas[col_idx]:
+            if estado == "Disponible":
+                if st.button(f"🟢 {numero}", key=f"btn_{numero}", use_container_width=True):
+                    st.session_state.numero_seleccionado = numero
+                    st.rerun()
+            elif estado == "Reservado":
+                st.button(f"🟠 {numero}", key=f"btn_{numero}", disabled=True, use_container_width=True)
+            else:
+                st.button(f"🔴 {numero}", key=f"btn_{numero}", disabled=True, use_container_width=True)
 
 # ========== FORMULARIO DE RESERVA ==========
 if st.session_state.numero_seleccionado:
