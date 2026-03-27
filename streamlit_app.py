@@ -25,28 +25,30 @@ st.markdown("""
 .pago-texto { text-align: center; margin-top: 15px; padding: 15px; background: #1e3a5f; border-radius: 15px; color: white; }
 .alias-destacado { font-size: 1.3em; font-weight: bold; color: #c9a03d; background: rgba(255,255,255,0.1); display: inline-block; padding: 6px 16px; border-radius: 30px; }
 
-/* CONTENEDOR GRID PARA NÚMEROS - ESTO ES LO IMPORTANTE */
-.numeros-grid {
-    display: grid;
-    grid-template-columns: repeat(10, 1fr);
-    gap: 6px;
-    margin: 15px 0;
-    width: 100%;
-}
-
-.numeros-grid .stButton {
-    width: 100%;
-}
-
-/* Para móviles muy pequeños, reducir un poco el gap */
-@media (max-width: 480px) {
-    .numeros-grid {
+/* ESTILO PARA FORZAR 10 COLUMNAS EN MÓVIL */
+@media (max-width: 768px) {
+    .stButton button { 
+        font-size: 10px; 
+        padding: 6px 2px;
+        min-width: 32px;
+    }
+    /* Forzar que los contenedores de columnas sean flexibles pero mantengan 10 por fila */
+    .row-widget.stHorizontal {
+        flex-wrap: wrap !important;
+        display: flex !important;
         gap: 4px;
     }
-    .numeros-grid button {
-        font-size: 10px;
-        padding: 6px 2px;
+    .row-widget.stHorizontal > div {
+        flex: 0 0 calc(10% - 4px) !important;
+        max-width: calc(10% - 4px) !important;
+        min-width: calc(10% - 4px) !important;
+        margin: 2px 0 !important;
     }
+    .premio-card { padding: 8px 4px; font-size: 10px; }
+    .premio-numero { width: 25px; height: 25px; font-size: 10px; }
+    .main-title { font-size: 1.5em; }
+    .info-card h3 { font-size: 1em; }
+    .precio-destacado { font-size: 1.3em; }
 }
 </style>
 """, unsafe_allow_html=True)
@@ -84,97 +86,15 @@ df = pd.DataFrame(datos[1:], columns=datos[0])
 st.markdown("### 🎲 ¡ELEGÍ TUS NÚMEROS!")
 st.markdown("🟢 **Disponible** | 🟠 **Reservado** | 🔴 **Vendido**")
 
-# ========== NÚMEROS EN CUADRÍCULA CON CSS GRID ==========
-# Crear un contenedor HTML con grid
-import streamlit.components.v1 as components
-
-# Generar HTML con los botones
-html_botones = '<div class="numeros-grid">'
-
-for i in range(100):
-    numero = f"{i:02d}"
-    
-    # Buscar estado del número
-    estado = "Disponible"
-    if len(df[df['Número'] == numero]) > 0:
-        estado = df[df['Número'] == numero]['Estado'].values[0]
-    
-    if estado == "Disponible":
-        color = "🟢"
-        disabled = ""
-    elif estado == "Reservado":
-        color = "🟠"
-        disabled = " disabled"
-    else:
-        color = "🔴"
-        disabled = " disabled"
-    
-    # Cada botón es un div con un botón HTML
-    html_botones += f'''
-    <div>
-        <button class="numero-btn" data-numero="{numero}"{disabled}>
-            {color} {numero}
-        </button>
-    </div>
-    '''
-
-html_botones += '</div>'
-
-# Agregar JavaScript para manejar los clics
-html_botones += '''
-<script>
-document.querySelectorAll('.numero-btn').forEach(btn => {
-    btn.addEventListener('click', function() {
-        if (!this.disabled) {
-            const numero = this.getAttribute('data-numero');
-            // Crear un evento personalizado para Streamlit
-            const event = new CustomEvent('streamlit:setComponentValue', {
-                detail: { value: numero }
-            });
-            window.dispatchEvent(event);
-        }
-    });
-});
-</script>
-'''
-
-# Mostrar los botones
-components.html(html_botones, height=600, scrolling=True)
-
-# Capturar número seleccionado desde el componente
-# Usamos un input oculto para capturar la selección
-if 'numero_seleccionado' not in st.session_state:
-    st.session_state.numero_seleccionado = None
-
-# Método alternativo: usar botones de Streamlit pero con layout CSS grid
-# Vamos a usar un enfoque diferente: crear filas con st.columns pero con CSS que fuerce el grid
-st.markdown("""
-<style>
-/* Forzar que los st.columns se comporten como grid en móvil */
-@media (max-width: 768px) {
-    .row-widget.stHorizontal {
-        flex-wrap: wrap !important;
-        display: flex !important;
-    }
-    .row-widget.stHorizontal > div {
-        flex: 0 0 10% !important;
-        max-width: 10% !important;
-        min-width: 10% !important;
-    }
-}
-</style>
-""", unsafe_allow_html=True)
-
-# Usar st.columns pero con CSS que fuerce 10 columnas en móvil
-st.markdown("### 📱 Versión mejorada")
-st.markdown("*(Si no ves los números en grilla, probá hacer zoom out en el navegador)*")
-
+# ========== UNA SOLA CUADRÍCULA DE NÚMEROS ==========
+# Usar st.columns con CSS que fuerza 10 columnas en móvil
 for fila in range(10):
     cols = st.columns(10)
     for col_idx in range(10):
         numero_num = fila * 10 + col_idx
         numero = f"{numero_num:02d}"
         
+        # Buscar estado del número
         estado = "Disponible"
         if len(df[df['Número'] == numero]) > 0:
             estado = df[df['Número'] == numero]['Estado'].values[0]
