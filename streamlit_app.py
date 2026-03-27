@@ -4,7 +4,6 @@ from google.oauth2.service_account import Credentials
 import pandas as pd
 import time
 import json
-import hashlib
 from PIL import Image, ImageDraw, ImageFont
 import io
 
@@ -34,7 +33,7 @@ def conectar_google_sheets():
 
 client = conectar_google_sheets()
 
-# ========== FUNCIÓN DE LOGIN ==========
+# ========== FUNCIÓN DE LOGIN (CONTRASEÑA EN TEXTO PLANO) ==========
 def verificar_usuario(username, password):
     """Verificar usuario en Google Sheets (contraseña en texto plano)"""
     if not client:
@@ -46,11 +45,12 @@ def verificar_usuario(username, password):
         
         for fila in datos[1:]:
             if len(fila) >= 4 and fila[0] == username and fila[3] == "SI":
-                # Comparar contraseña en texto plano (sin hash)
-                if password == fila[1]:  # fila[1] es la contraseña en texto plano
+                # Comparar contraseña en texto plano
+                if password == fila[1]:
                     return True, fila[2]  # fila[2] es el rol
         return False, None
     except Exception as e:
+        st.error(f"Error en login: {e}")
         return False, None
 
 # ========== FUNCIONES PARA CARGAR DATOS ==========
@@ -143,16 +143,39 @@ def actualizar_estado(numero, estado, nombre="", dni="", telefono=""):
     return False
 
 def guardar_config(config):
-    """Guardar configuración (solo admin)"""
+    """Guardar configuración con diagnóstico"""
     if not client or st.session_state.user_role != "admin":
+        st.error("❌ No tienes permisos o no hay conexión")
         return False
+    
     try:
         sheet = client.open("Rifa").worksheet("Config")
-        for idx, (clave, valor) in enumerate(config.items(), start=2):
-            sheet.update_cell(idx, 1, clave)
-            sheet.update_cell(idx, 2, str(valor))
+        
+        # Obtener todas las filas actuales
+        todas_filas = sheet.get_all_values()
+        
+        # Si no hay datos, crear encabezados
+        if len(todas_filas) == 0:
+            sheet.append_row(["Campo", "Valor"])
+        
+        # Actualizar cada campo
+        for clave, valor in config.items():
+            try:
+                # Buscar si la clave ya existe
+                celda = sheet.find(clave)
+                if celda:
+                    # Actualizar valor existente
+                    sheet.update_cell(celda.row, 2, str(valor))
+                else:
+                    # Agregar nueva fila
+                    sheet.append_row([clave, str(valor)])
+            except Exception as e:
+                st.warning(f"Error con {clave}: {e}")
+        
         return True
-    except:
+        
+    except Exception as e:
+        st.error(f"❌ Error al guardar: {str(e)}")
         return False
 
 def guardar_premios(premios):
@@ -172,7 +195,8 @@ def guardar_premios(premios):
             sheet.update_cell(i, 3, p['descripcion'])
             sheet.update_cell(i, 4, p['orden'])
         return True
-    except:
+    except Exception as e:
+        st.error(f"Error al guardar premios: {e}")
         return False
 
 # ========== MOSTRAR LOGIN ==========
@@ -278,17 +302,17 @@ def mostrar_admin_panel(config, premios):
         
         with tab3:
             st.markdown("### Gestión de Usuarios")
-            st.info("📌 Para agregar usuarios, editá directamente el Google Sheet en la pestaña 'Usuarios'")
+            st.info("📌 Para agregar o modificar usuarios, editá directamente el Google Sheet en la pestaña 'Usuarios'")
             st.markdown("""
             **Estructura de la pestaña Usuarios:**
             - Columna A: Usuario
-            - Columna B: Contraseña (hash SHA256)
+            - Columna B: Contraseña (texto plano)
             - Columna C: Rol (admin / editor)
             - Columna D: Activo (SI / NO)
             
-            **Contraseñas de ejemplo:**
-            - 'admin' → hash: `8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918`
-            - 'editor' → hash: `5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8`
+            **Ejemplo:**
+            | administrador | 124578 | admin | SI |
+            | editor | 123456 | editor | SI |
             """)
     
     else:
@@ -440,7 +464,7 @@ def mostrar_rifa_publica(config, premios):
     st.markdown(f'<div class="info-card"><h3>🎲 NÚMEROS DEL 00 AL 99</h3><div class="precio-destacado">${precio_unidad:,} CADA NÚMERO</div></div>', unsafe_allow_html=True)
     st.markdown(f'<div class="promo-oferta"><p>🎁 ¡PROMOCIÓN ESPECIAL! 🎁</p><span>{cantidad_promo} NÚMEROS POR ${precio_promo:,}</span></div>', unsafe_allow_html=True)
     
-    # Fecha del sorteo (bloque superior)
+    # Fecha del sorteo
     fecha_sorteo = config.get("fecha_sorteo", "Pendiente")
     if fecha_sorteo and fecha_sorteo != "Pendiente":
         st.markdown(f'<div class="fecha-box"><strong>📅 Fecha del sorteo:</strong> {fecha_sorteo}</div>', unsafe_allow_html=True)
