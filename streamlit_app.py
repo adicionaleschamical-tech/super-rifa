@@ -6,6 +6,8 @@ import time
 import json
 from PIL import Image, ImageDraw, ImageFont
 import io
+import hashlib
+from datetime import datetime
 
 st.set_page_config(page_title="SUPER RIFA", page_icon="✂️", layout="wide")
 
@@ -34,6 +36,23 @@ def conectar_google_sheets():
         return None
 
 client = conectar_google_sheets()
+
+# ========== FUNCIÓN PARA OBTENER HASH DE NÚMEROS ==========
+def obtener_hash_numeros():
+    """Obtiene un hash de los números vendidos/reservados para invalidar caché"""
+    if client:
+        try:
+            sheet = client.open("Rifa").worksheet("Numeros")
+            datos = sheet.get_all_values()
+            # Crear hash de los estados
+            estados_str = ""
+            for fila in datos[1:]:  # Saltar encabezado
+                if len(fila) >= 2:
+                    estados_str += f"{fila[0]}:{fila[1]}|"
+            return hashlib.md5(estados_str.encode()).hexdigest()[:8]
+        except:
+            return "00000000"
+    return "00000000"
 
 # ========== FUNCIÓN DE LOGIN ==========
 def verificar_usuario(username, password):
@@ -291,6 +310,76 @@ def limpiar_todos_los_premios():
     except Exception as e:
         st.error(f"Error al limpiar premios: {e}")
         return False
+
+# ========== FUNCIÓN PARA GENERAR IMAGEN (MEJORADA) ==========
+@st.cache_data(ttl=30, show_spinner=False)
+def generar_imagen_rifa(cantidad_numeros=100, inicio=0, hash_cache=""):
+    """Genera imagen de la rifa con caché de 30 segundos"""
+    try:
+        sheet = client.open("Rifa").worksheet("Numeros")
+        datos = sheet.get_all_values()
+        df_img = pd.DataFrame(datos[1:], columns=datos[0])
+        
+        estados = {}
+        for _, row in df_img.iterrows():
+            estados[str(row['Número']).strip()] = row['Estado']
+        
+        columnas = 10
+        filas = (cantidad_numeros + columnas - 1) // columnas
+        
+        ancho_celda = 55
+        alto_celda = 55
+        
+        ancho_total = ancho_celda * columnas + 40
+        alto_total = alto_celda * filas + 100  # Aumentado para el timestamp
+        
+        img = Image.new('RGB', (ancho_total, alto_total), color='#f8f9fa')
+        draw = ImageDraw.Draw(img)
+        
+        try:
+            fuente = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 14)
+            fuente_pequeña = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 10)
+        except:
+            fuente = ImageFont.load_default()
+            fuente_pequeña = ImageFont.load_default()
+        
+        # Título principal
+        draw.text((ancho_total//2 - 70, 10), "SUPER RIFA", fill='#1e3a5f', font=fuente)
+        
+        # Agregar timestamp y hash
+        timestamp = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+        draw.text((ancho_total - 150, 10), f"Actualizado: {timestamp}", fill='#666', font=fuente_pequeña)
+        draw.text((20, 10), f"Hash: {hash_cache}", fill='#999', font=fuente_pequeña)
+        
+        for fila in range(filas):
+            for col in range(columnas):
+                numero_idx = fila * columnas + col
+                if numero_idx < cantidad_numeros:
+                    numero = f"{inicio + numero_idx:02d}"
+                    estado = estados.get(numero, "Disponible")
+                    
+                    x0 = 20 + col * ancho_celda
+                    y0 = 50 + fila * alto_celda
+                    x1 = x0 + ancho_celda - 1
+                    y1 = y0 + alto_celda - 1
+                    
+                    if estado == "Disponible":
+                        color = '#10b981'
+                    elif estado == "Reservado":
+                        color = '#f59e0b'
+                    else:
+                        color = '#ef4444'
+                    
+                    draw.rectangle([x0, y0, x1, y1], fill=color, outline='white')
+                    draw.text((x0 + 18, y0 + 18), numero, fill='white', font=fuente)
+        
+        img_bytes = io.BytesIO()
+        img.save(img_bytes, format='PNG')
+        img_bytes.seek(0)
+        return img_bytes
+    except Exception as e:
+        print(f"Error generando imagen: {e}")
+        return None
 
 # ========== MOSTRAR LOGIN ==========
 def mostrar_login():
@@ -552,66 +641,6 @@ def generar_css(config):
     </style>
     """
 
-# ========== FUNCIÓN PARA GENERAR IMAGEN ==========
-@st.cache_data(ttl=600)
-def generar_imagen_rifa(cantidad_numeros=100, inicio=0):
-    try:
-        sheet = client.open("Rifa").worksheet("Numeros")
-        datos = sheet.get_all_values()
-        df_img = pd.DataFrame(datos[1:], columns=datos[0])
-        
-        estados = {}
-        for _, row in df_img.iterrows():
-            estados[str(row['Número']).strip()] = row['Estado']
-        
-        columnas = 10
-        filas = (cantidad_numeros + columnas - 1) // columnas
-        
-        ancho_celda = 55
-        alto_celda = 55
-        
-        ancho_total = ancho_celda * columnas + 40
-        alto_total = alto_celda * filas + 80
-        
-        img = Image.new('RGB', (ancho_total, alto_total), color='#f8f9fa')
-        draw = ImageDraw.Draw(img)
-        
-        try:
-            fuente = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 14)
-        except:
-            fuente = ImageFont.load_default()
-        
-        draw.text((ancho_total//2 - 70, 10), "SUPER RIFA", fill='#1e3a5f', font=fuente)
-        
-        for fila in range(filas):
-            for col in range(columnas):
-                numero_idx = fila * columnas + col
-                if numero_idx < cantidad_numeros:
-                    numero = f"{inicio + numero_idx:02d}"
-                    estado = estados.get(numero, "Disponible")
-                    
-                    x0 = 20 + col * ancho_celda
-                    y0 = 50 + fila * alto_celda
-                    x1 = x0 + ancho_celda - 1
-                    y1 = y0 + alto_celda - 1
-                    
-                    if estado == "Disponible":
-                        color = '#10b981'
-                    elif estado == "Reservado":
-                        color = '#f59e0b'
-                    else:
-                        color = '#ef4444'
-                    
-                    draw.rectangle([x0, y0, x1, y1], fill=color, outline='white')
-                    draw.text((x0 + 18, y0 + 18), numero, fill='white', font=fuente)
-        
-        img_bytes = io.BytesIO()
-        img.save(img_bytes, format='PNG')
-        img_bytes.seek(0)
-        return img_bytes
-    except:
-        return None
-
 # ========== VISTA PÚBLICA DE LA RIFA ==========
 def mostrar_rifa_publica(config, premios):
     st.markdown(generar_css(config), unsafe_allow_html=True)
@@ -741,19 +770,39 @@ def mostrar_rifa_publica(config, premios):
     
     st.markdown(f'<div class="pago-texto">💰 PAGOS POR TRANSFERENCIA AL ALIAS:<br><div class="alias-destacado">{config.get("alias", "Tomas.130611")}</div></div>', unsafe_allow_html=True)
     
+    # Mostrar imagen de la rifa con actualización mejorada
     if config.get("mostrar_imagen_rifa", "SI") == "SI":
         st.markdown("---")
         st.markdown("### 📸 Vista previa de la rifa")
-        imagen = generar_imagen_rifa(cantidad_numeros, inicio_numeracion)
+        
+        # Agregar botón de actualización manual
+        col1, col2, col3 = st.columns([3, 1, 1])
+        with col2:
+            if st.button("🔄 Actualizar imagen", key="refresh_img", use_container_width=True):
+                st.cache_data.clear()
+                st.rerun()
+        with col3:
+            st.caption(f"⏱️ Actualiza cada 30s")
+        
+        # Obtener hash actual para invalidar caché
+        hash_actual = obtener_hash_numeros()
+        
+        # Generar imagen con el hash
+        imagen = generar_imagen_rifa(cantidad_numeros, inicio_numeracion, hash_actual)
         if imagen:
             st.image(imagen, use_container_width=True)
-            st.caption("🕐 Imagen actualizada cada 10 minutos")
-            st.download_button(
-                label="📥 Descargar imagen",
-                data=imagen,
-                file_name="rifa_actualizada.png",
-                mime="image/png"
-            )
+            st.caption("🕐 La imagen se actualiza automáticamente cada 30 segundos")
+            
+            # Botón de descarga
+            col_desc1, col_desc2, col_desc3 = st.columns([3, 1, 3])
+            with col_desc2:
+                st.download_button(
+                    label="📥 Descargar imagen",
+                    data=imagen,
+                    file_name="rifa_actualizada.png",
+                    mime="image/png",
+                    use_container_width=True
+                )
     
     st.markdown(f'<div style="text-align:center; color:#666; margin-top:30px;">{config.get("footer_texto", "¡Gracias por participar!")}</div>', unsafe_allow_html=True)
 
